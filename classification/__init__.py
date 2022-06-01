@@ -1,0 +1,1 @@
+from .Sars_CoV_2_classifier import SarsCoV2Classifier
