@@ -45,10 +45,11 @@ class VirtualSequencer:
         is_stopped: bool
 
 
-    def __init__(self, read_directory: str, chunk_time: float) -> None:
+    def __init__(self, read_directory: str, chunk_time: float, realistic: bool=True) -> None:
         self.read_directory = read_directory
         self.chunk_time = chunk_time
         self.chunk_length = chunk_time * SEQUENCING_SPEED
+        self.live_read_setter = self._set_live_reads_realistic if realistic else self._set_live_reads_idealistic
 
         self.queue_lock = Lock()
         self.current_lock = Lock()
@@ -94,7 +95,7 @@ class VirtualSequencer:
         self.preloader_thread.start()
 
         self.simulator_thread = Thread(target=self._simulate, name='read_simulator')
-        self.provider_thread = Thread(target=self._set_live_reads, name='live_read_provider')
+        self.provider_thread = Thread(target=self.live_read_setter, name='live_read_provider')
 
         self.ready_event.wait()
 
@@ -195,7 +196,52 @@ class VirtualSequencer:
         self.unblock_event.set((channel, saved_time))
 
 
-    def _set_live_reads(self) -> None:
+    def _set_live_reads_realistic(self) -> None:
+        sleep_time = self.chunk_time
+
+        while self.is_not_canceled():
+            while sleep_time > 0:
+                t_start = _time()
+
+                self.provider_wakeup_event.wait(sleep_time)
+                self.provider_wakeup_event.clear()
+
+                t_end = _time()
+                sleep_time -= t_end + t_start
+
+            t_start = _time()
+
+            for channel in self.provider_wakeup_event.get_data():
+                with self.current_lock:
+                    read = self.current_reads[channel]
+
+                chunk_position = _get_read_position(self.start_time, read.time_delta)
+
+                if (chunk_position > len(read.signal) or
+                    read.is_stopped or
+                    read.read_id != read_data.read_id or
+                    read.time_delta != read_data.time_delta
+                ):
+                    with self.live_lock:
+                        self.live_reads[read.channel] = None
+                else:
+                    chunk_start = max(0, chunk_position - self.chunk_length)
+                    signal_chunk = read.signal[chunk_start : chunk_position]
+
+                    with self.live_lock:
+                        self.live_reads[read.channel] = self.LiveRead(
+                            channel=read.channel,
+                            number=read.read_id,
+                            signal=signal_chunk
+                        )
+
+            self.live_read_event.set()
+
+            t_end = _time()
+            sleep_time = self.chunk_time - t_end + t_start
+
+
+    def _set_live_reads_idealistic(self) -> None:
         sorted_next_channels = []
         sleep_time = None
 
