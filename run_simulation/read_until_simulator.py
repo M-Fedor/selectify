@@ -3,20 +3,29 @@ from threading import Event, Thread
 
 from .virtual_sequencer import VirtualSequencer
 
-from utils import sync_print
+from .utils import sync_print
 
 
 class ReadUntilSimulator(ReadUntilClient):
 
-    def __init__(self, read_directory: str,
-                chunk_time: float,
-                cache_size: int,
-                one_chunk: bool
+    def __init__(self,
+        fast5_read_directory: str,
+        sorted_read_directory: str,
+        chunk_time: float,
+        realistic: bool,
+        cache_size: int,
+        one_chunk: bool
     ) -> None:
         self.cache_size = cache_size
         self.one_chunk = one_chunk
 
-        self.virtual_sequencer = VirtualSequencer(read_directory, chunk_time)
+        self.virtual_sequencer = VirtualSequencer(
+            fast5_read_directory,
+            sorted_read_directory,
+            chunk_time,
+            realistic
+        )
+
         self.data_queue = ReadCache(cache_size)
 
         self.running = Event()
@@ -45,7 +54,7 @@ class ReadUntilSimulator(ReadUntilClient):
 
 
     @property
-    def aquisition_progress(self):
+    def aquisition_progress(self) -> None:
         raise NotImplementedError
 
 
@@ -60,9 +69,9 @@ class ReadUntilSimulator(ReadUntilClient):
     def _process_reads(self) -> None:
         live_reads = self.virtual_sequencer.get_live_reads()
 
-        for read_chunks in live_reads:
-            if not self.is_running:
-                break
+        while self.is_running and self.virtual_sequencer.is_not_canceled():
+            for read_chunks in live_reads:
+                for chunk in read_chunks:
+                    self.data_queue[chunk.channel] = chunk
 
-            for chunk in read_chunks:
-                self.data_queue[chunk.channel] = chunk
+        self.running.clear()

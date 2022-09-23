@@ -1,15 +1,19 @@
+from __future__ import annotations
+
 import heapq
 import numpy as np
 import os
 
 from collections import deque
 from dataclasses import dataclass
+from ont_fast5_api.fast5_interface import get_fast5_file
+from ont_fast5_api.fast5_read import Fast5Read
 from threading import Event, Lock, Thread
 from time import sleep, time_ns
 from typing import Generator, List, Dict, Tuple
 
 from .data import ReadData, SimulatorEvent
-from utils import sync_print
+from .utils import get_file_sort_id, sync_print
 
 
 MIN_READ_QUEUE_SIZE = 40
@@ -35,20 +39,28 @@ class VirtualSequencer:
         chunk_time_delta: float
         chunk_idx: int
 
-        def __lt__(self, other) -> bool:
+        def __lt__(self, other: LiveReadData) -> bool:
             return self.chunk_time_delta < other.chunk_time_delta
 
 
     @dataclass(frozen=False)
     class ReadSimulationData(ReadData):
+        signal: np.ndarray
         channel: str
         is_stopped: bool
 
 
-    def __init__(self, read_directory: str, chunk_time: float) -> None:
-        self.read_directory = read_directory
+    def __init__(self,
+        fast5_read_directory: str,
+        sorted_read_directory: str,
+        chunk_time: float,
+        realistic: bool=True
+    ) -> None:
+        self.fast5_read_directory = fast5_read_directory
+        self.sorted_read_directory = sorted_read_directory
         self.chunk_time = chunk_time
         self.chunk_length = chunk_time * SEQUENCING_SPEED
+        self.live_read_setter = self._set_live_reads_realistic if realistic else self._set_live_reads_idealistic
 
         self.queue_lock = Lock()
         self.current_lock = Lock()
@@ -63,7 +75,8 @@ class VirtualSequencer:
         self.simulator_thread = None
         self.provider_thread = None
 
-        self.read_files = {}
+        self.read_index_files = {}
+        self.sorted_fast5_files = []
         self.reset()
 
 
@@ -77,24 +90,28 @@ class VirtualSequencer:
 
     def initialize(self) -> None:
         sync_print('Initialize virtual sequencer...')
-        for file_name in os.listdir(self.read_directory):
-            path = os.path.join(self.read_directory, file_name)
+        for file_name in os.listdir(self.sorted_read_directory):
+            path = os.path.join(self.sorted_read_directory, file_name)
             file = open(path, 'r')
 
             channel = file.readline().strip()
-            assert channel not in self.read_files
+            assert channel not in self.read_index_files
 
-            self.read_files[channel] = file
+            self.read_index_files[channel] = file
             self.read_queues[channel] = deque()
             self.current_reads[channel] = None
             self.live_reads[channel] = None
             self.saved_times[channel] = 0
 
+        for file_name in sorted(os.listdir(self.fast5_read_directory), key=get_file_sort_id):
+            path = os.path.join(self.fast5_read_directory, file_name)
+            self.sorted_fast5_files.append(get_fast5_file(path, mode='r'))
+
         self.preloader_thread = Thread(target=self._preload_reads, name='read_preloader')
         self.preloader_thread.start()
 
         self.simulator_thread = Thread(target=self._simulate, name='read_simulator')
-        self.provider_thread = Thread(target=self._set_live_reads, name='live_read_provider')
+        self.provider_thread = Thread(target=self.live_read_setter, name='live_read_provider')
 
         self.ready_event.wait()
 
@@ -114,7 +131,9 @@ class VirtualSequencer:
             self.simulator_thread.join()
             self.provider_thread.join()
 
-        for _, file in self.read_files.items():
+        for _, file in self.read_index_files.items():
+            file.close()
+        for file in self.sorted_fast5_files:
             file.close()
 
         self.preloader_wakeup_event.clear()
@@ -122,7 +141,8 @@ class VirtualSequencer:
         self.live_read_event.clear()
         self.unblock_event.clear()
         self.cancel_event.clear()
-        self.read_files = {}
+        self.read_index_files = {}
+        self.sorted_fast5_files = []
         self.read_queues = {}
         self.current_reads = {}
         self.live_reads = {}
@@ -183,19 +203,58 @@ class VirtualSequencer:
         saved_length = len(read.signal) - read_pos
         saved_time = (saved_length / SEQUENCING_SPEED) - (read_pos / EJECTION_SPEED)
 
-        sync_print("Unblocking read on channel %s read position %d time-delta %.2f saved length %d saved time %.2f" % 
-                    (channel,
-                    read_pos,
-                    read.time_delta,
-                    saved_length,
-                    saved_time
-                )
+        sync_print(
+            f'Unblocking read on channel {channel} read position {read_pos} time-delta {read.time_delta} '
+            f'saved length {saved_length} saved time {saved_time}'
         )
 
         self.unblock_event.set((channel, saved_time))
 
 
-    def _set_live_reads(self) -> None:
+    def _set_live_reads_realistic(self) -> None:
+        sleep_time = self.chunk_time
+
+        while self.is_not_canceled():
+            while sleep_time > 0:
+                t_start = _time()
+
+                self.provider_wakeup_event.wait(sleep_time)
+                self.provider_wakeup_event.clear()
+
+                t_end = _time()
+                sleep_time -= t_end + t_start
+
+            t_start = _time()
+
+            for channel in self.provider_wakeup_event.get_data():
+                with self.current_lock:
+                    read = self.current_reads[channel]
+
+                chunk_position = _get_read_position(self.start_time, read.time_delta)
+
+                if chunk_position > len(read.signal) or read.is_stopped:
+                    with self.live_lock:
+                        self.live_reads[read.channel] = None
+                else:
+                    chunk_start = max(0, chunk_position - self.chunk_length)
+                    signal_chunk = read.signal[chunk_start : chunk_position]
+
+                    with self.live_lock:
+                        self.live_reads[read.channel] = self.LiveRead(
+                            channel=read.channel,
+                            number=read.read_id,
+                            signal=signal_chunk
+                        )
+
+            self.live_read_event.set()
+
+            t_end = _time()
+
+            assert t_end - t_start < 0.01
+            sleep_time = self.chunk_time - t_end + t_start
+
+
+    def _set_live_reads_idealistic(self) -> None:
         sorted_next_channels = []
         sleep_time = None
 
@@ -251,8 +310,39 @@ class VirtualSequencer:
                 heapq.heappush(sorted_next_channels, read_data)
                 self.live_read_event.set()
 
-            read_data = sorted_next_channels[0]
-            sleep_time = read_data.chunk_time_delta - _get_sequencing_time(self.start_time)
+            if sorted_next_channels:
+                read_data = sorted_next_channels[0]
+                sleep_time = read_data.chunk_time_delta - _get_sequencing_time(self.start_time)
+            else:
+                sleep_time = None
+
+
+    def _extract_fast5_read_data(
+        self,
+        channel: str,
+        fast5_file_index: str,
+        read_id: str
+    ) -> ReadSimulationData:
+        fast5_file_index = int(fast5_file_index)
+        assert fast5_file_index >= 0 and fast5_file_index < len(self.sorted_fast5_files)
+
+        fast5_file = self.sorted_fast5_files[fast5_file_index]
+        read = Fast5Read(fast5_file, read_id)
+
+        sampling_rate = read.handle['channel_id'].attrs['sampling_rate']
+        start_time = read.handle['Raw'].attrs['start_time']
+        signal = read.get_raw_data()
+
+        time_delta = start_time / sampling_rate
+
+        return self.ReadSimulationData(
+            time_delta=time_delta,
+            read_id=read_id,
+            fast5_file_index=fast5_file_index,
+            signal=signal,
+            channel=channel,
+            is_stopped =False,
+        )
 
 
     def _preload_reads(self) -> None:
@@ -260,20 +350,16 @@ class VirtualSequencer:
             for channel, queue in self.read_queues.items():
                 queue_length = len(queue)
 
-                if queue_length > MIN_READ_QUEUE_SIZE:
+                if queue_length > MIN_READ_QUEUE_SIZE + 10:
                     continue
                 for _ in range(MAX_READ_QUEUE_SIZE - queue_length):
-                    read_line = self.read_files[channel].readline()
+                    read_line = self.read_index_files[channel].readline()
 
                     if not read_line:
                         break
 
-                    read_line = read_line.strip().split(',')
-                    read = ReadData(
-                        time_delta=int(read_line[0]),
-                        read_id=read_line[1],
-                        signal=np.asfarray(read_line[2:-1])
-                    )
+                    fast5_file_index, read_id = read_line.strip().split(',')
+                    read = self._extract_fast5_read_data(channel, fast5_file_index, read_id)
 
                     with self.queue_lock:
                         queue.append(read)
@@ -333,7 +419,8 @@ class VirtualSequencer:
                 sleep_time = sorted_next_reads[0].time_delta - _get_sequencing_time(self.start_time)
 
 
-    def _set_next_read(self, channel: str,
+    def _set_next_read(self,
+        channel: str,
         sorted_reads: List[ReadSimulationData],
         reads: Dict[str, ReadSimulationData]
     ) -> None:
@@ -341,17 +428,9 @@ class VirtualSequencer:
 
         with self.queue_lock:
             if queue:
-                read = queue.popleft()
+                simulation_read = queue.popleft()
             else:
                 return
-        
-        simulation_read = self.ReadSimulationData(
-            time_delta=self._get_read_time_delta(channel, read),
-            read_id=read.read_id,
-            signal=read.signal,
-            channel=channel,
-            is_stopped =False,
-        )
 
         heapq.heappush(sorted_reads, simulation_read)
         reads[channel] = simulation_read
@@ -370,7 +449,7 @@ class VirtualSequencer:
             heapq.heappush(sorted_reads, reads[channel])
 
 
-    def _get_read_time_delta(self, channel: str, read: ReadData) -> float:
+    def _get_read_time_delta(self, channel: str, read: ReadSimulationData) -> float:
         saved_time = self.saved_times[channel]
         return read.time_delta - saved_time
 

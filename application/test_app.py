@@ -3,11 +3,14 @@ from time import sleep
 from run_simulation import ReadUntilSimulator
 
 
-directory = '../../../simulation_reads/'
+fast5_directory = 'selectify/data/'
+sorted_directory = 'selectify/output'
 
 read_until = ReadUntilSimulator(
-    read_directory=directory,
+    fast5_read_directory=fast5_directory,
+    sorted_read_directory=sorted_directory,
     chunk_time=0.375,
+    realistic=True,
     cache_size = 512,
     one_chunk=True
 )
