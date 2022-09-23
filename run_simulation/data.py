@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 
 from dataclasses import dataclass
@@ -9,9 +11,9 @@ from typing import List, Tuple
 class ReadData:
     time_delta: float
     read_id: str
-    signal: np.ndarray
+    fast5_file_index: int
 
-    def __lt__(self, other) -> bool:
+    def __lt__(self, other: ReadData) -> bool:
         return self.time_delta < other.time_delta
 
 
