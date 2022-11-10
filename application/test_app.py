@@ -10,7 +10,7 @@ read_until = ReadUntilSimulator(
     fast5_read_directory=fast5_directory,
     sorted_read_directory=sorted_directory,
     chunk_time=0.375,
-    realistic=True,
+    idelistic=False,
     cache_size = 512,
     one_chunk=True
 )
