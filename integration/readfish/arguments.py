@@ -9,6 +9,9 @@ Some of the original arguments are marked. They do not have any effect after
 ReadUntilSimulator integration.
 """
 
+import argparse
+import sys
+
 from utils import nice_join
 
 
@@ -16,15 +19,12 @@ DEFAULT_WORKERS = 1
 DEFAULT_LOG_FORMAT = "%(asctime)s %(name)s %(message)s"
 DEFAULT_LOG_LEVEL = "info"
 DEFAULT_CHANNELS = [1, 512]
-DEFAULT_DELAY = 0
 DEFAULT_RUN_TIME = 172800
 DEFAULT_UNBLOCK = 0.1
 DEFAULT_READ_CACHE = "ReadCache"
 DEFAULT_CACHE_SIZE = 512
 DEFAULT_BATCH_SIZE = 512
-DEFAULT_THROTTLE = 0.1
-DEFAULT_MIN_CHUNK = 2000
-DEFAULT_LOG_PREFIX = ""
+DEFAULT_THROTTLE = 0.4
 DEFAULT_SPLIT_READ_INTERVAL = 0.4
 
 READ_CACHE_TYPES = ("ReadCache", "AccumulatingCache")
@@ -59,14 +59,6 @@ BASE_ARGS = (
                  "provided by ReadUntilSimulator",
             default=DEFAULT_SPLIT_READ_INTERVAL,
         )
-    ),
-    # Following argument was added to integrate ReadUntilSimulator
-    (
-        "--idealistic",
-        dict(
-            action="store_true",
-            help="",
-        ),
     ),
     # Following argument has NO effect when bound with ReadUntilSimulator
     (
@@ -114,6 +106,7 @@ BASE_ARGS = (
             ),
         ),
     ),
+      # TODO: delete workers
     (
         "--workers",
         dict(
@@ -124,15 +117,14 @@ BASE_ARGS = (
         ),
     ),
     (
+        # ToDo: Delete and replace with api calls.
         "--channels",
         dict(
             metavar="CHANNELS",
             type=int,
             nargs=2,
             help="Channel range to use as a sequence, expects two integers "
-                 "separated by a space (default: {})".format(
-                    DEFAULT_CHANNELS
-            ),
+                "separated by a space (default: {})".format(DEFAULT_CHANNELS),
             default=DEFAULT_CHANNELS,
         ),
     ),
@@ -147,18 +139,18 @@ BASE_ARGS = (
             default=DEFAULT_RUN_TIME,
         ),
     ),
+    # Following argument has NO effect when bound with ReadUntilSimulator
     (
         "--unblock-duration",
         dict(
             metavar="UNBLOCK-DURATION",
             type=int,
-            help="Time, in seconds, to apply unblock voltage (default: {})".format(
-                DEFAULT_UNBLOCK
-            ),
+            help="Argument has NO effect! Readfish is currently bound with ReadUntilSimulator",
             default=DEFAULT_UNBLOCK,
         ),
     ),
     (
+        # ToDo:Deprecate so always the same size as the flowcell
         "--cache-size",
         dict(
             metavar="CACHE-SIZE",
@@ -170,6 +162,7 @@ BASE_ARGS = (
         ),
     ),
     (
+        # ToDo: Batch size should default to flowcell size unless otherwise specified.
         "--batch-size",
         dict(
             metavar="BATCH-SIZE",
@@ -181,6 +174,7 @@ BASE_ARGS = (
         ),
     ),
     (
+        # ToDo: Determine if we need a minimum value for throttle which shouldn't be overridden.
         "--throttle",
         dict(
             metavar="THROTTLE",
@@ -230,3 +224,45 @@ BASE_ARGS = (
         ),
     ),
 )
+
+
+def get_parser(extra_args=None, file=None, default_args=None):
+    """Generic argument parser for ReadFish scripts
+
+    Parameters
+    ----------
+    extra_args : Tuple[Tuple[str, dict], ...]
+        Extra arguments to append onto the base arguments
+    file : str
+        Optional. __file__ from the python script, used for program string
+    default_args : Tuple[Tuple[str, dict], ...]
+        Arguments that form the base requirements for all ReadFish scripts
+
+    Returns
+    -------
+    parser : argparse.ArgumentParser
+        The argparse parser, used for raising parser errors manually
+    arguments : argparse.ArgumentParser().parse_args()
+        The parsed arguments
+    """
+    if default_args is None:
+        args = BASE_ARGS
+    else:
+        args = default_args
+
+    if extra_args is not None:
+        args = args + extra_args
+
+    if file is None:
+        prog_string = "ReadFish API: {}".format(sys.argv[0].split("/")[-1])
+    else:
+        prog_string = "ReadFish API: {} ({})".format(sys.argv[0].split("/")[-1], file)
+
+    parser = argparse.ArgumentParser(prog_string)
+    for arg in args:
+        flags = arg[0]
+        if not isinstance(flags, tuple):
+            flags = (flags,)
+        parser.add_argument(*flags, **arg[1])
+
+    return parser, parser.parse_args()

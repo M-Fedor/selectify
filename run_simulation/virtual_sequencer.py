@@ -27,7 +27,8 @@ class VirtualSequencer:
     @dataclass(frozen=True)
     class LiveRead:
         channel: str
-        number: str
+        read_id: str
+        number: int
         signal: np.ndarray
 
 
@@ -35,6 +36,7 @@ class VirtualSequencer:
     class LiveReadData:
         channel: str
         read_id: str
+        number: int
         time_delta: float
         chunk_time_delta: float
         chunk_idx: int
@@ -45,6 +47,7 @@ class VirtualSequencer:
 
     @dataclass(frozen=False)
     class ReadSimulationData(ReadData):
+        number: int
         signal: np.ndarray
         channel: str
         is_stopped: bool
@@ -242,7 +245,8 @@ class VirtualSequencer:
                     with self.live_lock:
                         self.live_reads[read.channel] = self.LiveRead(
                             channel=read.channel,
-                            number=read.read_id,
+                            read_id=read.read_id,
+                            number=read.number,
                             signal=signal_chunk
                         )
 
@@ -271,6 +275,7 @@ class VirtualSequencer:
                     heapq.heappush(sorted_next_channels, self.LiveReadData(
                             channel=channel,
                             read_id=read.read_id,
+                            number=read.number,
                             time_delta=time_delta,
                             chunk_time_delta=time_delta + self.split_read_interval,
                             chunk_idx=1
@@ -301,7 +306,8 @@ class VirtualSequencer:
                 with self.live_lock:
                     self.live_reads[read.channel] = self.LiveRead(
                         channel=read.channel,
-                        number=read.read_id,
+                        read_id=read.read_id,
+                        number=read.number,
                         signal=signal_chunk
                     )
 
@@ -330,6 +336,7 @@ class VirtualSequencer:
         read = Fast5Read(fast5_file, read_id)
 
         sampling_rate = read.handle['channel_id'].attrs['sampling_rate']
+        read_number = read.handle['Raw'].attrs['read_number']
         start_time = read.handle['Raw'].attrs['start_time']
         signal = read.get_raw_data()
 
@@ -339,6 +346,7 @@ class VirtualSequencer:
             time_delta=time_delta,
             read_id=read_id,
             fast5_file_index=fast5_file_index,
+            number=read_number,
             signal=signal,
             channel=channel,
             is_stopped =False,

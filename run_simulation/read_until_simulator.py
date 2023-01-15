@@ -1,5 +1,8 @@
+from numpy import float32
+from pathlib import Path
 from read_until import ReadCache, ReadUntilClient
 from threading import Event, Thread
+from typing import List, Tuple
 
 from .virtual_sequencer import VirtualSequencer
 
@@ -29,8 +32,14 @@ class ReadUntilSimulator(ReadUntilClient):
         self.running = Event()
         self.process_thread = None
 
+        # Type of signal provided by ont_fast5_api
+        self.signal_dtype = float32
 
-    def run(self, first_channel, last_channel) -> None:
+        # Readfish compatibility
+        self.mk_run_dir = Path('.')
+
+
+    def run(self, first_channel: int, last_channel: int) -> None:
         sync_print('Start Read Until API...')
         self.virtual_sequencer.initialize()
         self.virtual_sequencer.start()
@@ -60,18 +69,27 @@ class ReadUntilSimulator(ReadUntilClient):
     def aquisition_progress(self) -> None:
         raise NotImplementedError
 
-    def get_read_chunks(self, batch_size=1, last=True):
-        return self.data_queue.popitems(batch_size, last=last)
+    def get_read_chunks(self, batch_size: int=1, last: bool=True) -> List[VirtualSequencer.LiveRead]:
+        return self.data_queue.popitems(batch_size, last)
 
     def stop_receiving_read(self, read_channel: str, read_number: str) -> None:
         self.virtual_sequencer.stop_receiving(read_channel, read_number)
 
+    def stop_receiving_read_batch(self, identifier_list: List[Tuple[str, str]]):
+        for identifier in identifier_list:
+            read_channel, read_number = identifier
+            self.stop_receiving_read(read_channel, read_number)
 
     def unblock_read(self, read_channel: str, read_number: str) -> None:
         self.virtual_sequencer.unblock(read_channel, read_number)
 
+    def unblock_read_batch(self, identifier_list: List[Tuple[str, str]]):
+        for identifier in identifier_list:
+            read_channel, read_number = identifier
+            self.unblock_read(read_channel, read_number)
 
-    def _process_reads(self, first_channel, last_channel) -> None:
+
+    def _process_reads(self, first_channel: int, last_channel: int) -> None:
         live_reads = self.virtual_sequencer.get_live_reads()
 
         while self.is_running and self.virtual_sequencer.is_not_canceled():

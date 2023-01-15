@@ -14,8 +14,7 @@ ReadUntil implementation that will only unblock reads. This should result in
 a read length histogram that has very short peaks (~280-580bp) as these are the
 smallest chunks that we can acquire. If you are not seeing these peaks, the
 `split_reads_after_seconds` parameter in the configuration file may need to be
-edited to 0.2-0.4:
-(<MinKNOW_folder>/ont-python/lib/python2.7/site-packages/bream4/configuration)
+edited to 0.2-0.4.
 """
 # Core imports
 import functools
@@ -25,23 +24,26 @@ import time
 from timeit import default_timer as timer
 
 # Read Until Simulation imports
-from run_simulation import read_until_simulator as read_until
-from read_until_api_v2 import run_workflow
 from arguments import BASE_ARGS
 from utils import print_args, get_cache_instance
+from run_simulation import read_until_simulator as read_until
 
 
 _help = "Unblock all reads"
 _cli = BASE_ARGS
 
 
-def simple_analysis(client, batch_size=512, throttle=0.1, unblock_duration=0.1):
+def simple_analysis(
+    client, duration, batch_size=512, throttle=0.4, unblock_duration=0.1
+):
     """Analysis function
 
     Parameters
     ----------
-    client : read_until.ReadUntilClient
+    client : read_until_api.ReadUntilClient
         An instance of the ReadUntilClient object
+    duration : int
+        Time to run for, in seconds
     batch_size : int
         The number of reads to be retrieved from the ReadUntilClient at a time
     throttle : int or float
@@ -53,13 +55,15 @@ def simple_analysis(client, batch_size=512, throttle=0.1, unblock_duration=0.1):
     -------
     None
     """
+    run_duration = time.time() + duration
     logger = logging.getLogger(__name__)
 
-    while client.is_running:
+    while client.is_running and time.time() < run_duration:
 
         r = 0
         t0 = timer()
-
+        unblock_batch_action_list = []
+        stop_receiving_action_list = []
         for r, (channel, read) in enumerate(
                 client.get_read_chunks(
                     batch_size=batch_size,
@@ -67,13 +71,17 @@ def simple_analysis(client, batch_size=512, throttle=0.1, unblock_duration=0.1):
                 ),
                 start=1,
         ):
-            # pass
-            client.unblock_read(channel, read.number)
-            client.stop_receiving_read(channel, read.number)
+            # Adding the channel and read.number to a list for a later batched unblock.
+            unblock_batch_action_list.append((channel, read.read_id))
+            stop_receiving_action_list.append((channel, read.read_id))
+
+        if len(unblock_batch_action_list) > 0:
+            client.unblock_read_batch(unblock_batch_action_list)
+            client.stop_receiving_read_batch(stop_receiving_action_list)
 
         t1 = timer()
         if r:
-            logger.info("Took {:.6f} for {} reads".format(t1-t0, r))
+            logger.info("Took {:.6f} for {} reads".format(t1 - t0, r))
         # limit the rate at which we make requests
         if t0 + throttle > t1:
             time.sleep(throttle + t0 - t1)
@@ -112,7 +120,6 @@ def run(parser, args):
 
     # Start by logging sys.argv and the parameters used
     logger = logging.getLogger("Manager")
-    # logger = setup_logger(__name__, args.log_format, log_file=args.log_file, level=logging.INFO)
     logger.info(" ".join(sys.argv))
     print_args(args, logger=logger)
 
@@ -120,31 +127,29 @@ def run(parser, args):
         fast5_read_directory=args.fast5_reads,
         sorted_read_directory=args.sorted_reads,
         split_read_interval=args.split_read_interval,
-        idealistic=args.idealistic,
-        data_queue=get_cache_instance(args.read_cache, args.cache_size),
+        idealistic=False,
+        data_queue=get_cache_instance("AccumulatingCache", args.cache_size),
         one_chunk=False,
     )
 
-    analysis_worker = functools.partial(
-        simple_analysis,
-        client=read_until_client,
-        batch_size=args.batch_size,
-        throttle=args.throttle,
-        unblock_duration=args.unblock_duration,
+    read_until_client.run(
+        first_channel=args.channels[0],
+        last_channel=args.channels[-1],
     )
 
-    results = run_workflow(
+    try:
+        simple_analysis(
         client=read_until_client,
-        partial_analysis_func=analysis_worker,
-        n_workers=args.workers,
-        run_time=args.run_time,
-        runner_kwargs={
-            # "min_chunk_size": args.min_chunk_size,
-            "first_channel": args.channels[0],
-            "last_channel": args.channels[-1],
-        },
+        duration=args.run_time,
+        batch_size=args.batch_size,
+        throttle=args.throttle,
     )
-    # No results returned
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        logging.error(traceback.format_exc())
+    finally:
+        read_until_client.reset()
 
 
 if __name__ == "__main__":
