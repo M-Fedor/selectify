@@ -146,8 +146,6 @@ def run(parser, args):
     )
     except KeyboardInterrupt:
         pass
-    except Exception as e:
-        logging.error(traceback.format_exc())
     finally:
         read_until_client.reset()
 
