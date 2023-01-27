@@ -1,3 +1,7 @@
+"""cli.py
+Main entry point for command line read until scripts.
+"""
+
 """
 This is a cli.py script from readfish repository renamed for convenience.
 Modules that are not a part of ReadUntilSimulator integration are commented out.
@@ -6,10 +10,16 @@ Modules that are not a part of ReadUntilSimulator integration are commented out.
 import argparse
 import importlib
 
-__version__ = '0.0.4'
+from _version import __version__
 
 
 def main():
+    """
+    Main function for entry point of the read until scripts.
+    Returns
+    -------
+
+    """
     parser = argparse.ArgumentParser(
         prog="readfish",
         epilog="See '<command> --help' to read about a specific sub-command.",
@@ -19,12 +29,13 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
     cmds = [
-       # ("targets", "ru_gen"),
+        ("targets", "ru_gen"),
        # ("align", "iteralign"),
        # ("centrifuge", "iteralign_centrifuge"),
         ("unblock-all", "unblock_all"),
-       # ("validate", "validate"),
+        ("validate", "validate"),
        # ("summary", "summarise_fq")
+       # ("barcode-targets", "ru_barcode_targets"),
     ]
     for cmd, module in cmds:
         _module = importlib.import_module("{}".format(module))

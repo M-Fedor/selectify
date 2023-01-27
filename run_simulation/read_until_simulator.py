@@ -1,6 +1,6 @@
 from numpy import float32
 from pathlib import Path
-from read_until import ReadCache, ReadUntilClient
+from read_until import ReadUntilClient
 from threading import Event, Thread
 from typing import List, Tuple
 
@@ -72,18 +72,18 @@ class ReadUntilSimulator(ReadUntilClient):
     def get_read_chunks(self, batch_size: int=1, last: bool=True) -> List[VirtualSequencer.LiveRead]:
         return self.data_queue.popitems(batch_size, last)
 
-    def stop_receiving_read(self, read_channel: str, read_number: str) -> None:
+    def stop_receiving_read(self, read_channel: int, read_number: str) -> None:
         self.virtual_sequencer.stop_receiving(read_channel, read_number)
 
-    def stop_receiving_read_batch(self, identifier_list: List[Tuple[str, str]]):
+    def stop_receiving_read_batch(self, identifier_list: List[Tuple[int, str]]):
         for identifier in identifier_list:
             read_channel, read_number = identifier
             self.stop_receiving_read(read_channel, read_number)
 
-    def unblock_read(self, read_channel: str, read_number: str) -> None:
+    def unblock_read(self, read_channel: int, read_number: str) -> None:
         self.virtual_sequencer.unblock(read_channel, read_number)
 
-    def unblock_read_batch(self, identifier_list: List[Tuple[str, str]]):
+    def unblock_read_batch(self, identifier_list: List[Tuple[int, str]]):
         for identifier in identifier_list:
             read_channel, read_number = identifier
             self.unblock_read(read_channel, read_number)
@@ -95,9 +95,7 @@ class ReadUntilSimulator(ReadUntilClient):
         while self.is_running and self.virtual_sequencer.is_not_canceled():
             for read_chunks in live_reads:
                 for chunk in read_chunks:
-                    channel_number = int(chunk.channel)
-
-                    if first_channel <= channel_number and channel_number <= last_channel:
+                    if first_channel <= chunk.channel and chunk.channel <= last_channel:
                         self.data_queue[chunk.channel] = chunk
 
         self.running.clear()

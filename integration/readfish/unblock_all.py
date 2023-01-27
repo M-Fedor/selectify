@@ -25,8 +25,9 @@ from timeit import default_timer as timer
 
 # Read Until Simulation imports
 from arguments import BASE_ARGS
-from utils import print_args, get_cache_instance
+from utils import print_args
 from run_simulation import read_until_simulator as read_until
+from read_until_api_v2 import AccumulatingCache
 
 
 _help = "Unblock all reads"
@@ -128,7 +129,7 @@ def run(parser, args):
         sorted_read_directory=args.sorted_reads,
         split_read_interval=args.split_read_interval,
         idealistic=False,
-        data_queue=get_cache_instance("AccumulatingCache", args.cache_size),
+        data_queue=AccumulatingCache(args.cache_size),
         one_chunk=False,
     )
 

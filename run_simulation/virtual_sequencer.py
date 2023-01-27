@@ -24,17 +24,17 @@ SEQUENCING_SPEED = 4_000
 
 class VirtualSequencer:
 
-    @dataclass(frozen=True)
+    @dataclass(frozen=False)
     class LiveRead:
-        channel: str
+        channel: int
         read_id: str
         number: int
-        signal: np.ndarray
+        raw_data: np.ndarray
 
 
     @dataclass(frozen=False)
     class LiveReadData:
-        channel: str
+        channel: int
         read_id: str
         number: int
         time_delta: float
@@ -48,8 +48,8 @@ class VirtualSequencer:
     @dataclass(frozen=False)
     class ReadSimulationData(ReadData):
         number: int
-        signal: np.ndarray
-        channel: str
+        raw_data: np.ndarray
+        channel: int
         is_stopped: bool
 
 
@@ -62,7 +62,7 @@ class VirtualSequencer:
         self.fast5_read_directory = fast5_read_directory
         self.sorted_read_directory = sorted_read_directory
         self.split_read_interval = split_read_interval
-        self.chunk_length = split_read_interval * SEQUENCING_SPEED
+        self.chunk_length = int(split_read_interval * SEQUENCING_SPEED)
         self.live_read_setter = self._set_live_reads_idealistic if idealistic else self._set_live_reads_realistic
 
         self.queue_lock = Lock()
@@ -97,7 +97,7 @@ class VirtualSequencer:
             path = os.path.join(self.sorted_read_directory, file_name)
             file = open(path, 'r')
 
-            channel = file.readline().strip()
+            channel = int(file.readline().strip())
             assert channel not in self.read_index_files
 
             self.read_index_files[channel] = file
@@ -176,7 +176,7 @@ class VirtualSequencer:
             yield live_reads
 
 
-    def stop_receiving(self, channel: str, read_id: str) -> None:
+    def stop_receiving(self, channel: int, read_id: str) -> None:
         with self.current_lock:
             assert channel in self.current_reads
 
@@ -187,7 +187,7 @@ class VirtualSequencer:
                 self.current_reads[channel].is_stopped = True
 
 
-    def unblock(self, channel: str, read_id: str) -> None:
+    def unblock(self, channel: int, read_id: str) -> None:
         with self.current_lock:
             assert channel in self.current_reads
 
@@ -200,10 +200,10 @@ class VirtualSequencer:
                 return
 
         read_pos = _get_read_position(self.start_time, read.time_delta)
-        if read_pos >= len(read.signal):
+        if read_pos >= len(read.raw_data):
             return
 
-        saved_length = len(read.signal) - read_pos
+        saved_length = len(read.raw_data) - read_pos
         saved_time = (saved_length / SEQUENCING_SPEED) - (read_pos / EJECTION_SPEED)
 
         sync_print(
@@ -216,6 +216,7 @@ class VirtualSequencer:
 
     def _set_live_reads_realistic(self) -> None:
         sleep_time = self.split_read_interval
+        active_channels = set()
 
         while self.is_not_canceled():
             while sleep_time > 0:
@@ -225,36 +226,46 @@ class VirtualSequencer:
                 self.provider_wakeup_event.clear()
 
                 t_end = _time()
-                sleep_time -= t_end + t_start
+                sleep_time = sleep_time - t_end + t_start
 
             t_start = _time()
 
             for channel in self.provider_wakeup_event.get_data():
+                active_channels.add(channel)
+
+            for channel in active_channels.copy():
                 with self.current_lock:
                     read = self.current_reads[channel]
 
                 chunk_position = _get_read_position(self.start_time, read.time_delta)
 
-                if chunk_position > len(read.signal) or read.is_stopped:
+                if chunk_position > len(read.raw_data) or read.is_stopped:
+                    active_channels.remove(channel)
                     with self.live_lock:
                         self.live_reads[read.channel] = None
                 else:
                     chunk_start = max(0, chunk_position - self.chunk_length)
-                    signal_chunk = read.signal[chunk_start : chunk_position]
+                    
+                    signal_chunk = read.raw_data[chunk_start : chunk_position]
+
+                    stall_signal_length = self.chunk_length - chunk_position
+                    if stall_signal_length > 0:
+                        stall_signal = _get_stall_signal(stall_signal_length)
+                        signal_chunk = np.concatenate((stall_signal, signal_chunk))
 
                     with self.live_lock:
                         self.live_reads[read.channel] = self.LiveRead(
                             channel=read.channel,
                             read_id=read.read_id,
                             number=read.number,
-                            signal=signal_chunk
+                            raw_data=signal_chunk
                         )
 
             self.live_read_event.set()
 
             t_end = _time()
 
-            assert t_end - t_start < 0.01
+            assert t_end - t_start < 0.05
             sleep_time = self.split_read_interval - t_end + t_start
 
 
@@ -291,7 +302,7 @@ class VirtualSequencer:
                 read = self.current_reads[read_data.channel]
             chunk_start, chunk_end = _get_chunk_positions(read_data.chunk_idx, self.chunk_length)
     
-            if (chunk_end > len(read.signal) or
+            if (chunk_end > len(read.raw_data) or
                 read.is_stopped or
                 read.read_id != read_data.read_id or
                 read.time_delta != read_data.time_delta
@@ -301,14 +312,14 @@ class VirtualSequencer:
             else:
                 assert _get_sequencing_time(self.start_time) - read.time_delta >= read_data.chunk_idx * self.split_read_interval
 
-                signal_chunk = read.signal[chunk_start : chunk_end]
+                signal_chunk = read.raw_data[chunk_start : chunk_end]
 
                 with self.live_lock:
                     self.live_reads[read.channel] = self.LiveRead(
                         channel=read.channel,
                         read_id=read.read_id,
                         number=read.number,
-                        signal=signal_chunk
+                        raw_data=signal_chunk
                     )
 
                 read_data.chunk_time_delta += self.split_read_interval
@@ -325,7 +336,7 @@ class VirtualSequencer:
 
     def _extract_fast5_read_data(
         self,
-        channel: str,
+        channel: int,
         fast5_file_index: str,
         read_id: str
     ) -> ReadSimulationData:
@@ -338,7 +349,7 @@ class VirtualSequencer:
         sampling_rate = read.handle['channel_id'].attrs['sampling_rate']
         read_number = read.handle['Raw'].attrs['read_number']
         start_time = read.handle['Raw'].attrs['start_time']
-        signal = read.get_raw_data()
+        raw_data = read.get_raw_data()
 
         time_delta = start_time / sampling_rate
 
@@ -347,7 +358,7 @@ class VirtualSequencer:
             read_id=read_id,
             fast5_file_index=fast5_file_index,
             number=read_number,
-            signal=signal,
+            raw_data=raw_data,
             channel=channel,
             is_stopped =False,
         )
@@ -430,9 +441,9 @@ class VirtualSequencer:
 
 
     def _set_next_read(self,
-        channel: str,
+        channel: int,
         sorted_reads: List[ReadSimulationData],
-        reads: Dict[str, ReadSimulationData]
+        reads: Dict[int, ReadSimulationData]
     ) -> None:
         queue = self.read_queues[channel]
 
@@ -451,7 +462,7 @@ class VirtualSequencer:
 
     def _unblock_reads(self,
         sorted_reads: List[ReadSimulationData],
-        reads: Dict[str, ReadSimulationData]
+        reads: Dict[int, ReadSimulationData]
     ) -> None:
         for channel, saved_time in self.unblock_event.get_data():
             self.saved_times[channel] += saved_time
@@ -459,7 +470,7 @@ class VirtualSequencer:
             heapq.heappush(sorted_reads, reads[channel])
 
 
-    def _get_read_time_delta(self, channel: str, read: ReadSimulationData) -> float:
+    def _get_read_time_delta(self, channel: int, read: ReadSimulationData) -> float:
         saved_time = self.saved_times[channel]
         return read.time_delta - saved_time
 
@@ -485,3 +496,7 @@ def _get_read_position(seq_start: float, read_start: int) -> int:
 
 def _time() -> float:
     return time_ns() / 1_000_000_000
+
+
+def _get_stall_signal(signal_length: int) -> np.ndarray:
+    return np.random.randint(750, 800, signal_length)
