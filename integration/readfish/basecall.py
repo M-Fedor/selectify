@@ -78,12 +78,10 @@ class GuppyCaller(PyGuppyClient):
             read_id = f"RU-{read.read_id}" #we do not modify read.id itself as this can result in persistence after this function finishes
             hold[read_id] = (channel, read.number)
             t0 = time.time()
-
-            raw_data = read.raw_data.astype(signal_dtype)
             success = self.pass_read(
                 package_read(
                     read_id=read_id,
-                    raw_data=np.frombuffer(raw_data, signal_dtype),
+                    raw_data=read.raw_data.astype(signal_dtype),
                     daq_offset=daq_values[channel].offset,
                     daq_scaling=daq_values[channel].scaling,
                 )

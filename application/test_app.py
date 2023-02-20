@@ -17,7 +17,7 @@ read_until = ReadUntilSimulator(
     one_chunk=True
 )
 
-read_until.run(1, 1)
+read_until.run()
 
 while read_until.is_running:
     read_batch = read_until.get_read_chunks(batch_size=512)
@@ -26,6 +26,6 @@ while read_until.is_running:
         sleep(0.001)
         read_until.unblock_read(channel, read.read_id)
 
-    sleep(0.1)
+    sleep(0.3)
 
 read_until.reset()

@@ -4,8 +4,9 @@ from read_until import ReadUntilClient
 from threading import Event, Thread
 from typing import List, Tuple
 
+from .data import LiveRead
 from .virtual_sequencer import VirtualSequencer
-
+from .visualization import draw_histogram
 from .utils import sync_print
 
 
@@ -17,7 +18,7 @@ class ReadUntilSimulator(ReadUntilClient):
         split_read_interval: float,
         idealistic: bool,
         data_queue,
-        one_chunk: bool
+        one_chunk: bool,
     ) -> None:
         self.one_chunk = one_chunk
         self.data_queue = data_queue
@@ -54,28 +55,35 @@ class ReadUntilSimulator(ReadUntilClient):
         self.process_thread.start()
 
 
-    def reset(self, data_queue=None) -> None:
+    def reset(self, data_queue=None, show_stats: bool=False) -> None:
         sync_print('Reset Read Until API...')
         if self.process_thread is not None:
             self.running.clear()
             self.process_thread.join()
 
         self.virtual_sequencer.reset()
-
         self.data_queue = data_queue
+
+        if show_stats:
+            self.show_statistics()
+
+
+    def show_statistics(self) -> None:
+        stats = self.virtual_sequencer.get_statistics()
+        draw_histogram(stats.read_lengths)
 
 
     @property
     def aquisition_progress(self) -> None:
         raise NotImplementedError
 
-    def get_read_chunks(self, batch_size: int=1, last: bool=True) -> List[VirtualSequencer.LiveRead]:
+    def get_read_chunks(self, batch_size: int=1, last: bool=True) -> List[LiveRead]:
         return self.data_queue.popitems(batch_size, last)
 
     def stop_receiving_read(self, read_channel: int, read_number: str) -> None:
         self.virtual_sequencer.stop_receiving(read_channel, read_number)
 
-    def stop_receiving_read_batch(self, identifier_list: List[Tuple[int, str]]):
+    def stop_receiving_read_batch(self, identifier_list: List[Tuple[int, str]]) -> None:
         for identifier in identifier_list:
             read_channel, read_number = identifier
             self.stop_receiving_read(read_channel, read_number)
@@ -83,7 +91,7 @@ class ReadUntilSimulator(ReadUntilClient):
     def unblock_read(self, read_channel: int, read_number: str) -> None:
         self.virtual_sequencer.unblock(read_channel, read_number)
 
-    def unblock_read_batch(self, identifier_list: List[Tuple[int, str]]):
+    def unblock_read_batch(self, identifier_list: List[Tuple[int, str]]) -> None:
         for identifier in identifier_list:
             read_channel, read_number = identifier
             self.unblock_read(read_channel, read_number)

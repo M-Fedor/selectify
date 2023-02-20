@@ -9,6 +9,7 @@ of a maximum size, based on collections.OrderedDict.
 
 See BaseCache for details on implementing your own cache.
 """
+import numpy as np
 from collections import OrderedDict
 from collections.abc import MutableMapping
 from threading import RLock
@@ -173,7 +174,7 @@ class AccumulatingCache(BaseCache):
                 # Key exists
                 if self[key].number == value.number:
                     # Same read, so update raw data
-                    self[key].raw_data += value.raw_data
+                    self[key].raw_data = np.concatenate((self[key].raw_data, value.raw_data))
                     self.missed += 1
                 else:
                     # New read
