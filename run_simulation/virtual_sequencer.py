@@ -13,7 +13,7 @@ from time import sleep, time_ns
 from typing import Generator, List, Dict, Tuple
 
 from .data import ReadSimulationData, LiveRead, LiveReadData, SimulatorEvent, SimulationStatistics
-from .utils import get_file_sort_id, sync_print
+from .utils import get_file_sort_id, sync_print, read_binary
 
 
 MIN_READ_QUEUE_SIZE = 40
@@ -66,9 +66,9 @@ class VirtualSequencer:
         sync_print('Initialize virtual sequencer...')
         for file_name in os.listdir(self.sorted_read_directory):
             path = os.path.join(self.sorted_read_directory, file_name)
-            file = open(path, 'r')
+            file = open(path, 'rb')
 
-            channel = int(file.readline().strip())
+            channel = read_binary(file, 2, 'int')
             assert channel not in self.read_index_files
 
             self.read_index_files[channel] = file
@@ -343,12 +343,14 @@ class VirtualSequencer:
                 if queue_length > MIN_READ_QUEUE_SIZE + 10:
                     continue
                 for _ in range(MAX_READ_QUEUE_SIZE - queue_length):
-                    read_line = self.read_index_files[channel].readline()
+                    file = self.read_index_files[channel]
 
-                    if not read_line:
+                    fast5_file_index = read_binary(file, 2, 'int')
+                    read_id = read_binary(file, 36, 'str')
+
+                    if not read_id:
                         break
 
-                    fast5_file_index, read_id = read_line.strip().split(',')
                     read = self._extract_fast5_read_data(channel, fast5_file_index, read_id)
 
                     with self.queue_lock:

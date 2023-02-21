@@ -7,10 +7,11 @@ from ont_fast5_api.fast5_interface import get_fast5_file
 from typing import Dict
 
 from data import ReadData
-from utils import get_file_sort_id
+from utils import get_file_sort_id, write_binary
 
 QUEUE_MINIMAL_SIZE = 500
 OUTPUT_CACHE_SIZE = 200
+OUTPUT_INTERVAL = 10
 
 
 def parse_arguments() -> argparse.Namespace():
@@ -60,15 +61,17 @@ def output_reads(
 ) -> None:
     for channel, queue in container.items():
         if channel not in files:
-            files[channel] = open(output_dir + '/sorted_reads_' + str(channel) + '.txt', 'w')
-            print(f'{channel}', file=files[channel])
+            files[channel] = open(output_dir + '/sorted_reads_' + str(channel), 'wb')
+            write_binary(files[channel], int(channel), 2)
 
         file = files[channel]
         queue_size = 0 if last_batch else QUEUE_MINIMAL_SIZE
 
         for _ in range(len(queue) - queue_size):
             read = queue.popleft()
-            print(f'{read.fast5_file_index},{read.read_id}', file=file)
+
+            write_binary(file, read.fast5_file_index, 2)
+            write_binary(file, read.read_id)
 
 
 def process_reads(args: argparse.Namespace) -> None:
@@ -96,10 +99,10 @@ def process_reads(args: argparse.Namespace) -> None:
 
             file_idx += 1               
 
+        if file_idx % OUTPUT_INTERVAL == 0:
+            print('Done: ' + str(file_idx), end='\r')
         if file_idx % OUTPUT_CACHE_SIZE == 0:
-            print(file_idx, end='\r')
-
-            sorting_safe_quard(reads_by_channel_number)
+            # sorting_safe_quard(reads_by_channel_number)
             output_reads(reads_by_channel_number, files_by_channel_number, args.output_dir)
 
     output_reads(reads_by_channel_number, files_by_channel_number, args.output_dir, last_batch=True)

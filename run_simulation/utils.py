@@ -1,4 +1,6 @@
+from io import IOBase
 from threading import Lock
+import struct
 
 
 _lock = Lock()
@@ -13,3 +15,23 @@ def get_file_sort_id(file_name: str) -> int:
 def sync_print(*a, **b) -> None:
     with _lock:
         print(*a, **b)
+
+
+def write_binary(file: IOBase, data: any, length: int=0) -> None:
+    if isinstance(data, int):
+        file.write(data.to_bytes(length=length, byteorder='little', signed=False))
+    if isinstance(data, str):
+        file.write(data.encode('ascii'))
+
+
+def read_binary(file: IOBase, length: int, data_type: str) -> any:
+    data = file.read(length)
+
+    if data_type == 'int':
+        if not data:
+            return -1
+        return struct.unpack('<H', data)[0]
+    if data_type == 'str':
+        if not data:
+            return ''
+        return data.decode('ascii')
