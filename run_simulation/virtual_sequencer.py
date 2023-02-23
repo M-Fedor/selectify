@@ -175,18 +175,19 @@ class VirtualSequencer:
         else:
             return
 
-        read_pos = _get_read_position(self.start_time, read.time_delta)
-        if read_pos >= len(read.raw_data) - 10:
+        sequenced_bases = _get_read_position(self.start_time, read.time_delta)
+        if sequenced_bases >= len(read.raw_data) - 10:
             return
 
-        saved_length = len(read.raw_data) - read_pos
-        saved_time = (saved_length / SEQUENCING_SPEED) - (read_pos / EJECTION_SPEED)
+        saved_length = len(read.raw_data) - sequenced_bases
+        saved_time = (saved_length / SEQUENCING_SPEED) - (sequenced_bases / EJECTION_SPEED)
 
         self.unblock_event.set((channel, saved_time, _time()))
-        self.statistics.read_lengths[read_pos] += 1
+        self.statistics.read_length_distribution[sequenced_bases] += 1
+        self.statistics.read_length_by_read_id[read_id] = sequenced_bases
 
         sync_print(
-            f'Unblocking read on channel {channel} read position {read_pos} time-delta {read.time_delta} '
+            f'Unblocking read on channel {channel} read position {sequenced_bases} time-delta {read.time_delta} '
             f'saved length {saved_length} saved time {saved_time}'
         )
 
@@ -471,7 +472,7 @@ def _get_read_position(seq_start: float, read_start: int) -> int:
     reading_time = _get_sequencing_time(seq_start) - read_start
     assert reading_time > 0
 
-    return int(reading_time * SEQUENCING_SPEED)
+    return int(reading_time * SEQUENCING_SPEED / 8.89)
 
 
 def _time() -> float:

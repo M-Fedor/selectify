@@ -16,7 +16,6 @@ See the original at <https://github.com/LooseLab/readfish>.
 # Core imports
 import functools
 import logging
-import numpy as np
 import sys
 import time
 from collections import defaultdict, deque, Counter
@@ -247,7 +246,7 @@ def simple_analysis(
         for read_info, read_id, seq_len, results in mapper.map_reads_2(
                 caller.basecall_minknow(
                     reads=client.get_read_chunks(batch_size=batch_size, last=True),
-                    signal_dtype=np.int16,
+                    signal_dtype=client.signal_dtype,
                     decided_reads=decided_reads,
                 )
         ):

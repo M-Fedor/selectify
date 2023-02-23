@@ -1,4 +1,4 @@
-from numpy import float32
+from numpy import int16
 from pathlib import Path
 from read_until import ReadUntilClient
 from threading import Event, Thread
@@ -6,7 +6,7 @@ from typing import List, Tuple
 
 from .data import LiveRead
 from .virtual_sequencer import VirtualSequencer
-from .visualization import draw_histogram
+from .statistics import draw_histogram, write_file
 from .utils import sync_print
 
 
@@ -22,6 +22,7 @@ class ReadUntilSimulator(ReadUntilClient):
     ) -> None:
         self.one_chunk = one_chunk
         self.data_queue = data_queue
+        self.signal_dtype = int16
 
         self.virtual_sequencer = VirtualSequencer(
             fast5_read_directory,
@@ -32,9 +33,6 @@ class ReadUntilSimulator(ReadUntilClient):
 
         self.running = Event()
         self.process_thread = None
-
-        # Type of signal provided by ont_fast5_api
-        self.signal_dtype = float32
 
         # Readfish compatibility
         self.mk_run_dir = Path('.')
@@ -55,22 +53,23 @@ class ReadUntilSimulator(ReadUntilClient):
         self.process_thread.start()
 
 
-    def reset(self, data_queue=None, show_stats: bool=False) -> None:
+    def reset(self, data_queue=None, produce_stats: bool=False) -> None:
         sync_print('Reset Read Until API...')
         if self.process_thread is not None:
             self.running.clear()
             self.process_thread.join()
 
+        self.statistics = self.virtual_sequencer.get_statistics()
         self.virtual_sequencer.reset()
         self.data_queue = data_queue
 
-        if show_stats:
-            self.show_statistics()
+        if produce_stats:
+            self.produce_statistics()
 
 
-    def show_statistics(self) -> None:
-        stats = self.virtual_sequencer.get_statistics()
-        draw_histogram(stats.read_lengths)
+    def produce_statistics(self) -> None:
+        draw_histogram(self.statistics.read_length_distribution)
+        write_file(self.statistics.read_length_by_read_id, 'stats/read_id_sequenced_lenghts.bin')
 
 
     @property

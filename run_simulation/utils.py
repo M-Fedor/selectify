@@ -35,3 +35,10 @@ def read_binary(file: IOBase, length: int, data_type: str) -> any:
         if not data:
             return ''
         return data.decode('ascii')
+
+
+def get_length(data: any) -> int:
+    if isinstance(data, int):
+        return 2
+    if isinstance(data, str):
+        return len(data)
