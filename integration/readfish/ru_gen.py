@@ -446,6 +446,7 @@ def run(parser, args):
         sorted_read_directory=args.sorted_reads,
         split_read_interval=args.split_read_interval,
         idealistic=False,
+        strand_type='dna',
         data_queue=AccumulatingCache(args.cache_size),
         one_chunk=False,
     )
@@ -490,7 +491,7 @@ def run(parser, args):
     except Exception as e:
         logging.error(traceback.format_exc())
     finally:
-        read_until_client.reset()
+        read_until_client.reset(produce_stats=True)
 
 
 if __name__ == "__main__":

@@ -19,7 +19,10 @@ from .utils import get_file_sort_id, sync_print, read_binary
 MIN_READ_QUEUE_SIZE = 40
 MAX_READ_QUEUE_SIZE = 100
 EJECTION_SPEED = 8_000
-SEQUENCING_SPEED = 4_000
+SAMPLING_RATE_DNA = 4_000
+SAMPLING_RATE_RNA = 3_012
+BASES_CONVERSION_FACTOR_DNA = 4000 / 450
+BASES_CONVERSION_FACTOR_RNA = 3012 / 70
 
 
 class VirtualSequencer:
@@ -28,13 +31,17 @@ class VirtualSequencer:
         fast5_read_directory: str,
         sorted_read_directory: str,
         split_read_interval: float,
+        strand_type: str,
         idealistic: bool=False
     ) -> None:
         self.fast5_read_directory = fast5_read_directory
         self.sorted_read_directory = sorted_read_directory
         self.split_read_interval = split_read_interval
-        self.chunk_length = int(split_read_interval * SEQUENCING_SPEED)
         self.live_read_setter = self._set_live_reads_idealistic if idealistic else self._set_live_reads_realistic
+
+        self.strand_type = strand_type
+        self.sampling_rate = SAMPLING_RATE_RNA if strand_type == 'rna' else SAMPLING_RATE_DNA
+        self.chunk_length = int(split_read_interval * self.sampling_rate)
 
         self.queue_lock = Lock()
         self.current_lock = Lock()
@@ -175,14 +182,16 @@ class VirtualSequencer:
         else:
             return
 
-        sequenced_bases = _get_read_position(self.start_time, read.time_delta)
-        if sequenced_bases >= len(read.raw_data) - 10:
+        sequenced_signals = self._get_read_position(read.time_delta)
+        if sequenced_signals >= len(read.raw_data) - 100:
             return
 
-        saved_length = len(read.raw_data) - sequenced_bases
-        saved_time = (saved_length / SEQUENCING_SPEED) - (sequenced_bases / EJECTION_SPEED)
+        saved_length = len(read.raw_data) - sequenced_signals
+        saved_time = (saved_length / self.sampling_rate) - (sequenced_signals / EJECTION_SPEED)
 
         self.unblock_event.set((channel, saved_time, _time()))
+
+        sequenced_bases = self._get_sequenced_bases(sequenced_signals)
         self.statistics.read_length_distribution[sequenced_bases] += 1
         self.statistics.read_length_by_read_id[read_id] = sequenced_bases
 
@@ -215,7 +224,7 @@ class VirtualSequencer:
                 with self.current_lock:
                     read = self.current_reads[channel]
 
-                chunk_position = _get_read_position(self.start_time, read.time_delta)
+                chunk_position = self._get_read_position(read.time_delta)
 
                 if chunk_position > len(read.raw_data) or read.is_stopped:
                     active_channels.remove(channel)
@@ -456,6 +465,18 @@ class VirtualSequencer:
         return read.time_delta - saved_time
 
 
+    def _get_read_position(self, read_start: int) -> int:
+        reading_time = _get_sequencing_time(self.start_time) - read_start
+        assert reading_time > 0
+
+        return int(reading_time * self.sampling_rate)
+
+
+    def _get_sequenced_bases(self, sequenced_signals: int) -> int:
+        bases_conversion_factor = BASES_CONVERSION_FACTOR_RNA if self.strand_type == 'rna' else BASES_CONVERSION_FACTOR_DNA
+        return int(sequenced_signals / bases_conversion_factor)
+
+
 def _get_sequencing_time(seq_start: float) -> float:
     return _time() - seq_start
 
@@ -466,13 +487,6 @@ def _get_chunk_positions(
 ) -> Tuple[int, int]:
     chunk_end = (chunk_idx) * chunk_length
     return int(chunk_end - chunk_length), int(chunk_end)
-
-
-def _get_read_position(seq_start: float, read_start: int) -> int:
-    reading_time = _get_sequencing_time(seq_start) - read_start
-    assert reading_time > 0
-
-    return int(reading_time * SEQUENCING_SPEED / 8.89)
 
 
 def _time() -> float:

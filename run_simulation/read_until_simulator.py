@@ -17,9 +17,12 @@ class ReadUntilSimulator(ReadUntilClient):
         sorted_read_directory: str,
         split_read_interval: float,
         idealistic: bool,
+        strand_type: str,
         data_queue,
         one_chunk: bool,
     ) -> None:
+        assert strand_type == 'dna' or strand_type == 'rna'
+
         self.one_chunk = one_chunk
         self.data_queue = data_queue
         self.signal_dtype = int16
@@ -28,6 +31,7 @@ class ReadUntilSimulator(ReadUntilClient):
             fast5_read_directory,
             sorted_read_directory,
             split_read_interval,
+            strand_type,
             idealistic
         )
 
