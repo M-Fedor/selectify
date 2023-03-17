@@ -58,14 +58,16 @@ class ReadUntilSimulator(ReadUntilClient):
 
     def reset(self, output_path: str=None, data_queue=None) -> None:
         sync_print('Reset Read Until API...')
-        if self.process_thread is not None:
-            self.running.clear()
-            self.process_thread.join()
 
         if output_path:
             self.virtual_sequencer.produce_output(output_path)
 
         self.virtual_sequencer.reset()
+
+        if self.process_thread is not None:
+            self.running.clear()
+            self.process_thread.join()
+
         self.data_queue = data_queue
 
 
@@ -96,10 +98,9 @@ class ReadUntilSimulator(ReadUntilClient):
     def _process_reads(self, first_channel: int, last_channel: int) -> None:
         live_reads = self.virtual_sequencer.get_live_reads()
 
-        while self.is_running and self.virtual_sequencer.is_not_canceled():
-            for read_chunks in live_reads:
-                for chunk in read_chunks:
-                    if first_channel <= chunk.channel and chunk.channel <= last_channel:
-                        self.data_queue[chunk.channel] = chunk
+        for read_chunks in live_reads:
+            for chunk in read_chunks:
+                if first_channel <= chunk.channel and chunk.channel <= last_channel:
+                    self.data_queue[chunk.channel] = chunk
 
         self.running.clear()

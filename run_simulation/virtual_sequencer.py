@@ -139,7 +139,7 @@ class VirtualSequencer:
 
     def produce_output(self, output_path: str) -> None:
         with self.stat_lock, open(output_path, 'wb') as file:
-            for key, value in statistics.items():
+            for key, value in self.statistics.read_length_by_read_id.items():
                 write_binary(file, key, get_length(key))
                 write_binary(file, value, get_length(value))
 
