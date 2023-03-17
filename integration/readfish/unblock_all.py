@@ -149,7 +149,7 @@ def run(parser, args):
     except KeyboardInterrupt:
         pass
     finally:
-        read_until_client.reset(produce_stats=True)
+        read_until_client.reset()
 
 
 if __name__ == "__main__":

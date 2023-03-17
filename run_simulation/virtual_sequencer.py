@@ -13,7 +13,7 @@ from time import sleep, time_ns
 from typing import Generator, List, Dict, Tuple
 
 from .data import ReadSimulationData, LiveRead, LiveReadData, SimulatorEvent, SimulationStatistics
-from .utils import get_file_sort_id, sync_print, read_binary
+from .utils import get_file_sort_id, sync_print, get_length, read_binary, write_binary
 
 
 MIN_READ_QUEUE_SIZE = 40
@@ -46,6 +46,7 @@ class VirtualSequencer:
         self.queue_lock = Lock()
         self.current_lock = Lock()
         self.live_lock = Lock()
+        self.stat_lock = Lock()
         self.cancel_event = Event()
         self.preloader_wakeup_event = Event()
         self.provider_wakeup_event = SimulatorEvent()
@@ -136,6 +137,13 @@ class VirtualSequencer:
         self.provider_thread.start()
 
 
+    def produce_output(self, output_path: str) -> None:
+        with self.stat_lock, open(output_path, 'wb') as file:
+            for key, value in statistics.items():
+                write_binary(file, key, get_length(key))
+                write_binary(file, value, get_length(value))
+
+
     def get_live_reads(self) -> Generator[List[LiveRead], None, None]:
         while self.is_not_canceled():
             live_reads = []
@@ -150,11 +158,6 @@ class VirtualSequencer:
                         self.live_reads[channel] = None
 
             yield live_reads
-
-
-    def get_statistics(self) -> SimulationStatistics:
-        assert self.cancel_event.is_set()
-        return self.statistics
 
 
     def stop_receiving(self, channel: int, read_id: str) -> None:
@@ -175,6 +178,7 @@ class VirtualSequencer:
             read = self.current_reads[channel]
 
         assert read.channel == channel
+        assert read.read_id in self.statistics.read_length_by_read_id
 
         if read.read_id == read_id:
             with self.current_lock:
@@ -192,13 +196,14 @@ class VirtualSequencer:
         self.unblock_event.set((channel, saved_time, _time()))
 
         sequenced_bases = self._get_sequenced_bases(sequenced_signals)
-        self.statistics.read_length_distribution[sequenced_bases] += 1
-        self.statistics.read_length_by_read_id[read_id] = sequenced_bases
 
-        sync_print(
-            f'Unblocking read on channel {channel} read position {sequenced_bases} time-delta {read.time_delta} '
-            f'saved length {saved_length} saved time {saved_time}'
-        )
+        with self.stat_lock:
+            self.statistics.read_length_by_read_id[read_id] = sequenced_bases
+
+        # sync_print(
+        #     f'Unblocking read on channel {channel} read position {sequenced_bases} time-delta {read.time_delta} '
+        #     f'saved length {saved_length} saved time {saved_time}'
+        # )
 
 
     def _set_live_reads_realistic(self) -> None:
@@ -223,6 +228,10 @@ class VirtualSequencer:
             for channel in active_channels.copy():
                 with self.current_lock:
                     read = self.current_reads[channel]
+
+                if read.read_id not in self.statistics.read_length_by_read_id:
+                    with self.stat_lock():
+                        self.statistics.read_length_by_read_id[read.read_id] = len(read.raw_data)
 
                 chunk_position = self._get_read_position(read.time_delta)
 

@@ -74,7 +74,6 @@ class SimulationStatistics:
 
     def __init__(self):
         self.read_length_by_read_id = dict()
-        self.read_length_distribution = defaultdict(self.default_factory)
         self.saved_times = defaultdict(self.default_factory)
 
 

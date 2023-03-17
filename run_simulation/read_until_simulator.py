@@ -6,7 +6,6 @@ from typing import List, Tuple
 
 from .data import LiveRead
 from .virtual_sequencer import VirtualSequencer
-from .statistics import draw_histogram, write_file
 from .utils import sync_print
 
 
@@ -57,23 +56,17 @@ class ReadUntilSimulator(ReadUntilClient):
         self.process_thread.start()
 
 
-    def reset(self, data_queue=None, produce_stats: bool=False) -> None:
+    def reset(self, output_path: str=None, data_queue=None) -> None:
         sync_print('Reset Read Until API...')
         if self.process_thread is not None:
             self.running.clear()
             self.process_thread.join()
 
-        self.statistics = self.virtual_sequencer.get_statistics()
+        if output_path:
+            self.virtual_sequencer.produce_output(output_path)
+
         self.virtual_sequencer.reset()
         self.data_queue = data_queue
-
-        if produce_stats:
-            self.produce_statistics()
-
-
-    def produce_statistics(self) -> None:
-        draw_histogram(self.statistics.read_length_distribution)
-        write_file(self.statistics.read_length_by_read_id, 'stats/read_id_sequenced_lenghts.bin')
 
 
     @property
