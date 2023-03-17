@@ -178,7 +178,6 @@ class VirtualSequencer:
             read = self.current_reads[channel]
 
         assert read.channel == channel
-        assert read.read_id in self.statistics.read_length_by_read_id
 
         if read.read_id == read_id:
             with self.current_lock:
@@ -198,6 +197,7 @@ class VirtualSequencer:
         sequenced_bases = self._get_sequenced_bases(sequenced_signals)
 
         with self.stat_lock:
+            assert read.read_id in self.statistics.read_length_by_read_id
             self.statistics.read_length_by_read_id[read_id] = sequenced_bases
 
         # sync_print(
@@ -230,7 +230,7 @@ class VirtualSequencer:
                     read = self.current_reads[channel]
 
                 if read.read_id not in self.statistics.read_length_by_read_id:
-                    with self.stat_lock():
+                    with self.stat_lock:
                         self.statistics.read_length_by_read_id[read.read_id] = len(read.raw_data)
 
                 chunk_position = self._get_read_position(read.time_delta)
