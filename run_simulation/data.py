@@ -70,7 +70,11 @@ class SimulatorEvent(Event):
         return data
 
 
+@dataclass(frozen=False)
 class SimulationStatistics:
+    read_length_by_read_id: Dict[str, int]
+    saved_times: Dict[int, float]
+
 
     def __init__(self):
         self.read_length_by_read_id = dict()

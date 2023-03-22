@@ -1,5 +1,5 @@
 [caller_settings]
-config_name = "dna_r9.4.1_450bps_fast_prom"
+config_name = "dna_r9.4.1_450bps_hac_prom"
 host = "127.0.0.1"
 port = 5555
 
@@ -10,7 +10,7 @@ reference = "/home/mfedor/git/selectify/integration/readfish/data/saccharomyces_
 name = "select_saccharomyces_cerevisiae"
 control = false
 min_chunks = 0
-max_chunks = 12
+max_chunks = 3
 targets = ["NC_001133.9", "NC_001134.8", "NC_001135.5", "NC_001136.10", "NC_001137.3", "NC_001138.5", "NC_001139.9", "NC_001140.6", "NC_001141.2", "NC_001142.9", "NC_001143.9", "NC_001144.5", "NC_001145.3", "NC_001146.8", "NC_001147.6", "NC_001148.4", "NC_001224.1"]
 single_on = "stop_receiving"
 multi_on = "stop_receiving"

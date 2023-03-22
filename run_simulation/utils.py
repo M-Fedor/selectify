@@ -30,7 +30,10 @@ def read_binary(file: IOBase, length: int, data_type: str) -> any:
     if data_type == 'int':
         if not data:
             return -1
-        return struct.unpack('<H', data)[0]
+        if length == 2:
+            return struct.unpack('<H', data)[0]
+        if length == 4:
+            return struct.unpack('<I', data)[0]
     if data_type == 'str':
         if not data:
             return ''

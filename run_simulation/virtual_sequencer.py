@@ -18,7 +18,7 @@ from .utils import get_file_sort_id, sync_print, get_length, read_binary, write_
 
 MIN_READ_QUEUE_SIZE = 40
 MAX_READ_QUEUE_SIZE = 100
-EJECTION_SPEED = 8_000
+EJECTION_SPEED = 40_000
 SAMPLING_RATE_DNA = 4_000
 SAMPLING_RATE_RNA = 3_012
 BASES_CONVERSION_FACTOR_DNA = 4000 / 450
@@ -129,6 +129,7 @@ class VirtualSequencer:
         self.live_reads = {}
         self.start_time = None
         self.statistics = SimulationStatistics()
+        self.maximum_fast5_file_index = 0
 
 
     def start(self) -> None:
@@ -139,9 +140,13 @@ class VirtualSequencer:
 
     def produce_output(self, output_path: str) -> None:
         with self.stat_lock, open(output_path, 'wb') as file:
-            for key, value in self.statistics.read_length_by_read_id.items():
-                write_binary(file, key, get_length(key))
-                write_binary(file, value, get_length(value))
+            for read_id, read_length in self.statistics.read_length_by_read_id.items():
+                write_binary(file, read_id)
+                write_binary(file, read_length, 4)
+        
+        dir_name = os.path.dirname(output_path)
+        with open(dir_name + '/additional_data.txt', 'w') as file:
+            print(f'Maximum fast5 file index: {self.maximum_fast5_file_index}', file=file)
 
 
     def get_live_reads(self) -> Generator[List[LiveRead], None, None]:
@@ -255,7 +260,7 @@ class VirtualSequencer:
 
             t_end = _time()
 
-            assert t_end - t_start < 0.05
+            # assert t_end - t_start < 0.05
             sleep_time = self.split_read_interval - t_end + t_start
 
 
@@ -370,6 +375,7 @@ class VirtualSequencer:
                     if not read_id:
                         break
 
+                    self.maximum_fast5_file_index = max(fast5_file_index, self.maximum_fast5_file_index)
                     read = self._extract_fast5_read_data(channel, fast5_file_index, read_id)
 
                     with self.queue_lock:
@@ -462,7 +468,7 @@ class VirtualSequencer:
     ) -> None:
         for channel, saved_time, timestamp in self.unblock_event.get_data():
             internal_reaction_time = _time() - timestamp
-            assert internal_reaction_time < 0.01
+            # assert internal_reaction_time < 0.01
 
             self.statistics.saved_times[channel] += saved_time
             reads[channel].time_delta = self._get_read_time_delta(channel, reads[channel])

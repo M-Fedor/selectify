@@ -1,0 +1,20 @@
+[caller_settings]
+config_name = "dna_r9.4.1_450bps_hac_prom"
+host = "127.0.0.1"
+port = 5555
+
+[conditions]
+reference = "/home/mfedor/git/selectify/integration/readfish/data/saccharomyces_cerevisiae_negative_index.mmi"
+
+[conditions.0]
+name = "select_saccharomyces_cerevisiae"
+control = false
+min_chunks = 0
+max_chunks = 12
+targets = ["NC_002516.2", "NC_000913.3", "NC_003197.2", "NC_003277.2", "NZ_KB944666.1", "NZ_KB944667.1", "NZ_KB944668.1", "NC_007795.1", "NC_003210.1", "NC_000964.3"]
+single_on = "unblock"
+multi_on = "unblock"
+single_off = "proceed"
+multi_off = "proceed"
+no_seq = "proceed"
+no_map = "proceed"

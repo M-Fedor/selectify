@@ -11,9 +11,9 @@ from statistics import Statistics
 def parse_arguments() -> argparse.Namespace():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--fast5-reads', type=str, help='Directory containing .fast5 files')
     parser.add_argument('--sequencing-output', type=str, help='Output file produced by Virtual sequencer')
     parser.add_argument('--minimap-output', type=str, help='Output file produced by Minimap2')
+    parser.add_argument('--produce_bed', action='store_true', default=False)
 
     args = parser.parse_args()
 
@@ -35,7 +35,7 @@ def load_sequencing_simulation_output(sequencing_output_path: str, container: Di
     with open(sequencing_output_path, 'rb') as file:
         while True:
             read_id = read_binary(file, 36, 'str')
-            sequenced_bases = read_binary(file, 2, 'int')
+            sequenced_bases = read_binary(file, 4, 'int')
 
             if not read_id:
                 break
@@ -91,6 +91,9 @@ def get_statistics(
 
 
 def visualize_statistics(stats: Statistics) -> None:
+    print(len(stats.on_target_read_length_distibution.items()))
+    print(len(stats.off_target_read_length_distibution.items()))
+
     draw_histogram(stats.on_target_read_length_distibution)
     draw_histogram(stats.off_target_read_length_distibution)
 
@@ -111,6 +114,9 @@ def process_data(args: argparse.Namespace) -> None:
     load_read_allignments(args.minimap_output, read_allignments)
 
     stats = get_statistics(simulated_read_lengths, read_allignments)
+
+    # if args.produce_bed:
+    #     produce_bed(simulated_read_lengths, read_allignments)        
 
     visualize_statistics(stats)
 
