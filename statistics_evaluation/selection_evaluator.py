@@ -69,33 +69,30 @@ def get_statistics(
 ) -> Statistics:
     stats = Statistics()
 
-    on_target_read_count = 0
-    off_target_read_count = 0
-
     for read_id, read_length in simulated_read_lengths.items():
         on_target = True if read_id in read_allignments else False
 
         if on_target:
             stats.on_target_bases += read_length
             stats.on_target_read_length_distibution[read_length] += 1
-            on_target_read_count += 1
+            stats.on_target_reads += 1
         else:
             stats.off_target_bases += read_length
             stats.off_target_read_length_distibution[read_length] += 1
-            off_target_read_count += 1
+            stats.off_target_reads += 1
 
-    stats.on_target_mean_read_length = stats.on_target_bases / on_target_read_count
-    stats.off_target_mean_read_length = stats.off_target_bases/ off_target_read_count
+    stats.on_target_mean_read_length = stats.on_target_bases / stats.on_target_reads
+    stats.off_target_mean_read_length = stats.off_target_bases/ stats.off_target_reads
 
     return stats
 
 
 def visualize_statistics(stats: Statistics) -> None:
-    print(len(stats.on_target_read_length_distibution.items()))
-    print(len(stats.off_target_read_length_distibution.items()))
-
     draw_histogram(stats.on_target_read_length_distibution)
     draw_histogram(stats.off_target_read_length_distibution)
+
+    print(f'On-target read count: {stats.on_target_reads}')
+    print(f'Off-target read count: {stats.off_target_reads}')
 
     print(f'On-target mean read length: {stats.on_target_mean_read_length}')
     print(f'Off-target mean read length: {stats.off_target_mean_read_length}')

@@ -349,16 +349,12 @@ def simple_analysis(
             # decision is an alias for the functions "unblock" or "stop_receiving"
             decision = decision_dict[decision_str]
 
-            if exceeded_threshold and (decision_str != "single_on" or decision_str != "multi-on"):
-                mode = "exceeded_max_chunks_stopped_receiving"
-                decisiontracker.event_seen(mode)
-                stop_receiving_action_list.append((channel, read_id))
 
             # If max_chunks has been exceeded AND we don't want to keep sequencing we unblock
-            # if exceeded_threshold and decision_str != "stop_receiving":
-            #     mode = "exceeded_max_chunks_unblocked"
-            #     decisiontracker.event_seen(mode)
-            #     unblock_batch_action_list.append((channel, read_id))
+            if exceeded_threshold and decision_str != "stop_receiving":
+                mode = "exceeded_max_chunks_unblocked"
+                decisiontracker.event_seen(mode)
+                unblock_batch_action_list.append((channel, read_id))
 
             # TODO: WHAT IS GOING ON?!
             #  I think that this needs to change between enrichment and depletion
@@ -497,7 +493,7 @@ def run(parser, args):
     except Exception as e:
         logging.error(traceback.format_exc())
 
-    read_until_client.reset(output_path='/home/mfedor/sequencer_output_fixed_max_chunks_hac_inverted/zymo_selection_sim.bin')
+    read_until_client.reset(output_path='/home/mfedor/sequencer_output_fixed_max_chunks_hac_inverted_enhanced_6_full_fixed_timing/zymo_selection_sim.bin')
 
 
 if __name__ == "__main__":
