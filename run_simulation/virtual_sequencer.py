@@ -32,12 +32,10 @@ class VirtualSequencer:
         sorted_read_directory: str,
         split_read_interval: float,
         strand_type: str='dna',
-        idealistic: bool=False
     ) -> None:
         self.fast5_read_directory = fast5_read_directory
         self.sorted_read_directory = sorted_read_directory
         self.split_read_interval = split_read_interval
-        self.live_read_setter = self._set_live_reads_idealistic if idealistic else self._set_live_reads_realistic
 
         self.strand_type = strand_type
         self.sampling_rate = SAMPLING_RATE_RNA if strand_type == 'rna' else SAMPLING_RATE_DNA
@@ -93,7 +91,7 @@ class VirtualSequencer:
         self.preloader_thread.start()
 
         self.simulator_thread = Thread(target=self._simulate, name='read_simulator')
-        self.provider_thread = Thread(target=self.live_read_setter, name='live_read_provider')
+        self.provider_thread = Thread(target=self._set_live_reads, name='live_read_provider')
 
         self.ready_event.wait()
 
@@ -210,7 +208,7 @@ class VirtualSequencer:
         # )
 
 
-    def _set_live_reads_realistic(self) -> None:
+    def _set_live_reads(self) -> None:
         sleep_time = self.split_read_interval
         active_channels = set()
 
@@ -259,71 +257,6 @@ class VirtualSequencer:
 
             t_end = _time()
             sleep_time = self.split_read_interval - t_end + t_start
-
-
-    def _set_live_reads_idealistic(self) -> None:
-        sorted_next_channels = []
-        sleep_time = None
-
-        while self.is_running():
-            while sleep_time is None or sleep_time > 0:
-                self.provider_wakeup_event.wait(sleep_time)
-                self.provider_wakeup_event.clear()
-
-                for channel in self.provider_wakeup_event.get_data():
-                    with self.current_lock:
-                        read = self.current_reads[channel]
-
-                    time_delta = read.time_delta
-                    heapq.heappush(sorted_next_channels, LiveReadData(
-                            channel=channel,
-                            read_id=read.read_id,
-                            number=read.number,
-                            time_delta=time_delta,
-                            chunk_time_delta=time_delta + self.split_read_interval,
-                            chunk_idx=1
-                        )
-                    )
-
-                read_data = sorted_next_channels[0]
-                sleep_time = read_data.chunk_time_delta - self._get_sequencing_time()
-
-            read_data = heapq.heappop(sorted_next_channels)
-
-            with self.current_lock:
-                read = self.current_reads[read_data.channel]
-            chunk_start, chunk_end = _get_chunk_positions(read_data.chunk_idx, self.chunk_length)
-    
-            if (chunk_end > len(read.raw_data) or
-                read.is_stopped or
-                read.read_id != read_data.read_id or
-                read.time_delta != read_data.time_delta
-            ):
-                with self.live_lock:
-                    self.live_reads[read.channel] = None
-            else:
-                assert self._get_sequencing_time() - read.time_delta >= read_data.chunk_idx * self.split_read_interval
-
-                signal_chunk = read.raw_data[chunk_start : chunk_end]
-
-                with self.live_lock:
-                    self.live_reads[read.channel] = self.LiveRead(
-                        channel=read.channel,
-                        read_id=read.read_id,
-                        number=read.number,
-                        raw_data=signal_chunk
-                    )
-
-                read_data.chunk_time_delta += self.split_read_interval
-                read_data.chunk_idx += 1
-                heapq.heappush(sorted_next_channels, read_data)
-                self.live_read_event.set()
-
-            if sorted_next_channels:
-                read_data = sorted_next_channels[0]
-                sleep_time = read_data.chunk_time_delta - self._get_sequencing_time()
-            else:
-                sleep_time = None
 
 
     def _extract_fast5_read_data(
@@ -495,14 +428,6 @@ class VirtualSequencer:
     def _get_sequencing_time(self) -> float:
         assert self.start_time is not None
         return _time() - self.start_time
-
-
-def _get_chunk_positions(
-    chunk_idx: int,
-    chunk_length: float
-) -> Tuple[int, int]:
-    chunk_end = (chunk_idx) * chunk_length
-    return int(chunk_end - chunk_length), int(chunk_end)
 
 
 def _time() -> float:

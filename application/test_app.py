@@ -1,3 +1,4 @@
+from threading import Event
 from time import sleep
 
 from read_until import ReadCache
@@ -5,20 +6,26 @@ from read_until import ReadCache
 from run_simulation import ReadUntilSimulator
 
 
-fast5_directory = 'selectify/data/'
-sorted_directory = 'selectify/output/'
+fast5_directory = '/home/mfedor/zymoset/'
+sorted_directory = '/home/mfedor/zymoset_index/'
 
 read_until = ReadUntilSimulator(
     fast5_read_directory=fast5_directory,
     sorted_read_directory=sorted_directory,
     split_read_interval=0.4,
-    idealistic=False,
+    strand_type='dna',
     data_queue=ReadCache(512),
     one_chunk=True
 )
 
-read_until.run()
+read_until.run(0, 512)
 
+try:
+    Event().wait()
+except KeyboardInterrupt:
+    pass
+
+'''
 while read_until.is_running:
     read_batch = read_until.get_read_chunks(batch_size=512)
 
@@ -27,5 +34,6 @@ while read_until.is_running:
         read_until.unblock_read(channel, read.read_id)
 
     sleep(0.3)
+'''
 
-read_until.reset()
+read_until.reset(output_path='/home/mfedor/sequencer_output_10m_fixed_timing/zymo_standard_sim.bin')

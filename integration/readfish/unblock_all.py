@@ -128,7 +128,6 @@ def run(parser, args):
         fast5_read_directory=args.fast5_reads,
         sorted_read_directory=args.sorted_reads,
         split_read_interval=args.split_read_interval,
-        idealistic=False,
         strand_type='dna',
         data_queue=AccumulatingCache(args.cache_size),
         one_chunk=False,

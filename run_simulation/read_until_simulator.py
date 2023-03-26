@@ -15,7 +15,6 @@ class ReadUntilSimulator(ReadUntilClient):
         fast5_read_directory: str,
         sorted_read_directory: str,
         split_read_interval: float,
-        idealistic: bool,
         strand_type: str,
         data_queue,
         one_chunk: bool,
@@ -31,7 +30,6 @@ class ReadUntilSimulator(ReadUntilClient):
             sorted_read_directory,
             split_read_interval,
             strand_type,
-            idealistic
         )
 
         self.running = Event()
