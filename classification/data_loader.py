@@ -19,7 +19,7 @@ class DataLoader(Sequence):
         self.item_length = item_length
         self.shuffle = shuffle
 
-        self.batch_holder = np.empty((self.batch_size, self.data.shape[1]), dtype=float)
+        self.batch_holder = np.empty((self.batch_size, self.data.shape[1]), dtype=np.float32)
         self.item_indices = np.arange(0, self.data.shape[0])
         # self.on_epoch_end()
 
