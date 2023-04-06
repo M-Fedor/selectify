@@ -20,12 +20,14 @@ class SarsCoV2Classifier:
 
     def __init__(self,
         train_data_path: str,
+        validation_data_path: str,
         signal_length: int,
         signal_begin: int,
         train_batch_size: int,
         validation_batch_size: int
     ) -> None:
         self.train_data_path = train_data_path
+        self.validation_data_path = validation_data_path
         self.signal_length = signal_length
         self.signal_begin = signal_begin
         self.train_batch_size = train_batch_size
@@ -42,24 +44,14 @@ class SarsCoV2Classifier:
         self.false_negatives = 0
 
 
-    def initialize_training(
-        self,
-        strides: int,
-        kernel_size: int,
-        use_data_factor: float=1,
-        validation_data_factor: float=0.2,
-        shuffle: bool=True
-    ) -> None:
+    def initialize_training(self, strides: int, kernel_size: int, use_data_factor: float=1, shuffle: bool=True) -> None:
         train_data = np.load(self.train_data_path, allow_pickle=True, mmap_mode='r')
-        train_data = train_data[:, self.signal_begin : train_data.shape[1]]
-
-        validation_data_size = floor(train_data.shape[0] * validation_data_factor)
-        validation_data = train_data[0 : validation_data_size]
-        train_data = train_data[validation_data_size : train_data.shape[0]]
+        validation_data = np.load(self.validation_data_path, allow_pickle=True, mmap_mode='r')
 
         self.train_data_loader = DataLoader(
             data=train_data,
             batch_size=self.train_batch_size,
+            item_begin=self.signal_begin,
             item_length=self.signal_length,
             use_items_factor=use_data_factor,
             shuffle=shuffle
@@ -68,12 +60,13 @@ class SarsCoV2Classifier:
         self.validation_data_loader = DataLoader(
             data=validation_data,
             batch_size=self.validation_batch_size,
+            item_begin=self.signal_begin,
             item_length=self.signal_length,
             use_items_factor=1,
             shuffle=shuffle
         )
 
-        input_shape = [len(train_data[0]) - 1, 1]
+        input_shape = (self.train_batch_size, self.signal_length, 1)
 
         self.classifier = Sequential()
 
@@ -83,7 +76,7 @@ class SarsCoV2Classifier:
                 strides=strides,
                 activation='relu',
                 padding='same',
-                input_shape=input_shape,
+                input_shape=input_shape[1:],
                 kernel_initializer=GlorotUniform(SEED),
                 bias_initializer=Zeros()
             )

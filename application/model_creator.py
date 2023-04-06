@@ -18,18 +18,21 @@ def reset_random_generators():
     tf.random.set_seed(SEED)
 
 
-session_conf = tf.compat.v1.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
-session = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph(), config=session_conf)
-K.set_session(session)
+#session_conf = tf.compat.v1.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
+#session = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph(), config=session_conf)
+#K.set_session(session)
+physical_devices = tf.config.experimental.list_physical_devices('GPU')
+config = tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 # os.environ['TF_DETERMINISTIC_OPS'] = '1'
 # os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 classifier = SarsCoV2Classifier(
-    train_data_path='/home/mfedor/covid_training_data/training_data.npy',
+    train_data_path='/home/mfedor/covid_training_data/training_data_part.npy',
+    validation_data_path='/home/mfedor/covid_training_data/validation_data_part.npy',
     signal_length=3_000,
     signal_begin=2_000,
-    train_batch_size=8_192,
+    train_batch_size=2_048,
     validation_batch_size=32
 )
 
@@ -39,7 +42,6 @@ classifier.initialize_training(
     strides=7,
     kernel_size=60,
     use_data_factor=1,
-    validation_data_factor=0.2,
     shuffle=True
 )
 
