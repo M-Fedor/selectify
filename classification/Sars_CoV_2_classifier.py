@@ -44,7 +44,14 @@ class SarsCoV2Classifier:
         self.false_negatives = 0
 
 
-    def initialize_training(self, strides: int, kernel_size: int, use_data_factor: float=1, shuffle: bool=True) -> None:
+    def initialize_training(
+        self,
+        strides: int,
+        kernel_size: int,
+        use_data_factor: float=1,
+        shuffle: bool=True,
+        shift: bool=False
+    ) -> None:
         train_data = np.load(self.train_data_path, allow_pickle=True, mmap_mode='r')
         validation_data = np.load(self.validation_data_path, allow_pickle=True, mmap_mode='r')
 
@@ -54,7 +61,8 @@ class SarsCoV2Classifier:
             item_begin=self.signal_begin,
             item_length=self.signal_length,
             use_items_factor=use_data_factor,
-            shuffle=shuffle
+            shuffle=shuffle,
+            shift=shift
         )
 
         self.validation_data_loader = DataLoader(
@@ -63,11 +71,21 @@ class SarsCoV2Classifier:
             item_begin=self.signal_begin,
             item_length=self.signal_length,
             use_items_factor=1,
-            shuffle=shuffle
+            shuffle=shuffle,
+            shift=shift
         )
 
         input_shape = (self.train_batch_size, self.signal_length, 1)
+        '''
+        self.classifier = Sequential()
+        self.classifier.add(Conv1D(filters=32, kernel_size=75, strides=10, activation='relu', padding='same', input_shape=input_shape[1:]))
+        self.classifier.add(Conv1D(filters=64, kernel_size=75, strides=10, activation='relu', padding='same'))
+        self.classifier.add(MaxPooling1D(pool_size=2))
+        self.classifier.add(Conv1D(filters=64, kernel_size=75, strides=10, activation='relu', padding='same'))
+        self.classifier.add(Flatten())
+        self.classifier.add(Dense(2, activation='softmax'))
 
+        '''
         self.classifier = Sequential()
 
         self.classifier.add(

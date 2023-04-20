@@ -10,6 +10,7 @@ from ont_fast5_api.fast5_interface import get_fast5_file
 
 REQUIRED_SIGNAL_LENGTH = 6_000
 OUTPUT_SIGNAL_LENGTH = 5_000
+OUTPUT_SIGNAL_CHUNKS = 3
 
 
 def parse_arguments() -> argparse.Namespace():
@@ -93,7 +94,7 @@ def extract_training_data(
     unsitable_positive_read_count = 0
     file_count = 0
 
-    positive_extract_read_count = len(positive_extract_read_ids)
+    positive_extract_read_count = len(positive_extract_read_ids) * OUTPUT_SIGNAL_CHUNKS
     print(f'Positive reads to be extracted: {positive_extract_read_count}')
 
     for file_name in os.listdir(fast5_dir):  
@@ -115,21 +116,27 @@ def extract_training_data(
                     continue
 
                 signal = read.get_raw_data()
-                if len(signal) < REQUIRED_SIGNAL_LENGTH:
-                    if label:
-                        unsitable_positive_read_count += 1
-                    continue
-
                 signal = rescale_signal(signal)
-                signal_chunk = signal[0 : OUTPUT_SIGNAL_LENGTH]
-                labeled_signal = np.append(signal_chunk, label)
 
-                if label:
-                    extracted_read_count += 1
-                    positive_data.append(labeled_signal)
-                else:
-                    negative_read_count += 1
-                    negative_data.append(labeled_signal)
+                for chunk_idx in range(OUTPUT_SIGNAL_CHUNKS):
+                    chunk_start = chunk_idx * OUTPUT_SIGNAL_LENGTH
+                    chunk_end = chunk_start + OUTPUT_SIGNAL_LENGTH
+
+                    if len(signal) < chunk_end + 1_000:
+                        if label:
+                            unsitable_positive_read_count += 1
+                        break
+
+                    signal_chunk = signal[chunk_start : chunk_end]
+                    labeled_signal = np.append(signal_chunk, label)
+                    assert len(labeled_signal) == OUTPUT_SIGNAL_LENGTH + 1
+
+                    if label:
+                        extracted_read_count += 1
+                        positive_data.append(labeled_signal)
+                    else:
+                        negative_read_count += 1
+                        negative_data.append(labeled_signal)
 
             print(
                 f"File count: {file_count}\t"
@@ -152,9 +159,11 @@ def extract_training_data(
     yield (positive_data, negative_data)
 
 
-def save_training_data(output_file, extracted_data: List[Tuple[np.ndarray, int]]) -> None:
-    data = np.array(extracted_data)
-    output_file.append(data)
+def save_training_data(output_file, extracted_data: List[np.ndarray]) -> None:
+    if extracted_data:
+        data = np.array(extracted_data)
+        data = data.astype(np.float32)
+        output_file.append(data)
 
 
 def permute_training_data(positive_path: str, negative_path: str, output_path: str) -> None:
@@ -162,7 +171,7 @@ def permute_training_data(positive_path: str, negative_path: str, output_path: s
     negative_data = np.load(negative_path, mmap_mode='r')
 
     data = np.append(positive_data, negative_data, axis=0)
-    data = np.random.permutation(data)
+    np.random.shuffle(data)
 
     data = np.save(output_path, data)
 
