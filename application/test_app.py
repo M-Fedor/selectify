@@ -36,4 +36,4 @@ while read_until.is_running:
     sleep(0.3)
 '''
 
-read_until.reset(output_path='/home/mfedor/sequencer_output_10m_fixed_timing/zymo_standard_sim.bin')
+read_until.reset(output_path='zymo_standard_sim.bin')

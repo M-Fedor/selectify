@@ -291,9 +291,12 @@ class VirtualSequencer:
     def _preload_reads(self) -> None:
         while self.is_running():
             for channel, queue in self.read_queues.items():
-                if len(queue) > MIN_READ_QUEUE_SIZE + 10:
+                with self.queue_lock:
+                    queue_length = len(queue)
+                if queue_length > MIN_READ_QUEUE_SIZE + 10:
                     continue
-                for _ in range(MAX_READ_QUEUE_SIZE - len(queue)):
+
+                for _ in range(MAX_READ_QUEUE_SIZE - queue_length):
                     file = self.read_index_files[channel]
 
                     fast5_file_index = read_binary(file, 2, 'int')
@@ -306,6 +309,8 @@ class VirtualSequencer:
                     read = self._extract_fast5_read_data(channel, fast5_file_index, read_id)
 
                     with self.queue_lock:
+                        if self.ready_event.is_set():
+                            assert queue
                         queue.append(read)
 
             if self.is_not_ready():
@@ -380,6 +385,7 @@ class VirtualSequencer:
         with self.queue_lock:
             if queue:
                 simulation_read = queue.popleft()
+                queue_length = len(queue)
             else:
                 return
 
@@ -391,7 +397,7 @@ class VirtualSequencer:
 
         assert simulation_read.time_delta >= self._get_sequencing_time()
 
-        if len(queue) <= MIN_READ_QUEUE_SIZE:
+        if queue_length <= MIN_READ_QUEUE_SIZE:
             self.preloader_wakeup_event.set()
 
 

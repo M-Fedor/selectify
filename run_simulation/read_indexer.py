@@ -10,7 +10,7 @@ from data import ReadData
 from utils import get_file_sort_id, write_binary
 
 QUEUE_MINIMAL_SIZE = 500
-OUTPUT_CACHE_SIZE = 200
+OUTPUT_CACHE_SIZE = 100
 OUTPUT_INTERVAL = 10
 
 
