@@ -14,7 +14,7 @@ OUTPUT_CACHE_SIZE = 100
 OUTPUT_INTERVAL = 10
 
 
-def parse_arguments() -> argparse.Namespace():
+def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--fast5-reads', type=str, help='Directory containing .fast5 files')

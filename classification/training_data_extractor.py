@@ -7,13 +7,14 @@ from typing import Generator, List, Set, Tuple
 from npy_append_array import NpyAppendArray
 from ont_fast5_api.fast5_interface import get_fast5_file
 
+from utils import rescale_signal
 
 REQUIRED_SIGNAL_LENGTH = 6_000
 OUTPUT_SIGNAL_LENGTH = 5_000
-OUTPUT_SIGNAL_CHUNKS = 3
+OUTPUT_SIGNAL_CHUNKS = 5
 
 
-def parse_arguments() -> argparse.Namespace():
+def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--mapped-reads-files', type=str, help='List of files containing read-ids of mapped reads')
@@ -27,20 +28,6 @@ def parse_arguments() -> argparse.Namespace():
         print('Incomplete inputs specified, nothing to do.')
         return None
     return args
-
-
-def med_mad(x: np.ndarray, factor: float=1.4826) -> Tuple[float, float]:
-    med = np.median(x)
-    mad = np.median(np.absolute(x - med)) * factor
-    return med, mad
-
-
-def rescale_signal(signal: np.ndarray) -> np.ndarray:
-    signal = signal.astype(np.float32)
-    med, mad = med_mad(signal)
-    signal -= med
-    signal /= mad
-    return np.clip(signal, -2.5, 2.5)
 
 
 def parse_input_line(line: str) -> Tuple[str, int]:

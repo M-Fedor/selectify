@@ -8,7 +8,7 @@ from run_simulation.utils import read_binary
 from statistics import Statistics
 
 
-def parse_arguments() -> argparse.Namespace():
+def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--sequencing-output', type=str, help='Output file produced by Virtual sequencer')

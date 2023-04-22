@@ -19,12 +19,12 @@ SEED = 13
 class SarsCoV2Classifier:
 
     def __init__(self,
-        train_data_path: str,
-        validation_data_path: str,
-        signal_length: int,
-        signal_begin: int,
-        train_batch_size: int,
-        validation_batch_size: int
+        train_data_path: str=None,
+        validation_data_path: str=None,
+        signal_length: int=None,
+        signal_begin: int=None,
+        train_batch_size: int=None,
+        validation_batch_size: int=None
     ) -> None:
         self.train_data_path = train_data_path
         self.validation_data_path = validation_data_path
@@ -131,7 +131,18 @@ class SarsCoV2Classifier:
         self.classifier.add(Flatten())
         self.classifier.add(Dense(2, activation='softmax', kernel_initializer=GlorotUniform(seed=13), bias_initializer=Zeros()))
 
-        self.classifier.compile(loss='categorical_crossentropy', optimizer=keras.optimizers.Adam(0.001),  metrics=['accuracy'])
+        learning_rate_schedule = keras.optimizers.schedules.ExponentialDecay(
+            initial_learning_rate=0.0005,
+            decay_steps=10_000,
+            decay_rate=0.96,
+            staircase=True
+        )
+
+        self.classifier.compile(
+            loss='categorical_crossentropy',
+            optimizer=keras.optimizers.Adam(learning_rate_schedule),
+            metrics=['accuracy']
+        )
 
 
     def train(self, epochs: int) -> None:
@@ -212,7 +223,7 @@ class SarsCoV2Classifier:
 
 
     def predict(self, inputs: np.ndarray):
-        return self.classifier(inputs)
+        return self.classifier(inputs, training=False)
 
 
     def load(self, path: str) -> None:
