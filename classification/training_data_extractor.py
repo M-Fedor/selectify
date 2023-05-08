@@ -9,8 +9,9 @@ from ont_fast5_api.fast5_interface import get_fast5_file
 
 from utils import rescale_signal
 
-REQUIRED_SIGNAL_LENGTH = 6_000
+
 OUTPUT_SIGNAL_LENGTH = 5_000
+OUTPUT_SIGNAL_OFFSET = 4_000
 OUTPUT_SIGNAL_CHUNKS = 5
 
 
@@ -78,7 +79,6 @@ def extract_training_data(
     negative_data = []
     negative_read_count = 0
     extracted_read_count = 0
-    unsitable_positive_read_count = 0
     file_count = 0
 
     positive_extract_read_count = len(positive_extract_read_ids) * OUTPUT_SIGNAL_CHUNKS
@@ -103,18 +103,21 @@ def extract_training_data(
                     continue
 
                 signal = read.get_raw_data()
+
+                if len(signal) < OUTPUT_SIGNAL_LENGTH:
+                    continue
+
                 signal = rescale_signal(signal)
 
                 for chunk_idx in range(OUTPUT_SIGNAL_CHUNKS):
-                    chunk_start = chunk_idx * OUTPUT_SIGNAL_LENGTH
+                    chunk_start = chunk_idx * OUTPUT_SIGNAL_OFFSET
                     chunk_end = chunk_start + OUTPUT_SIGNAL_LENGTH
 
-                    if len(signal) < chunk_end + 1_000:
-                        if label:
-                            unsitable_positive_read_count += 1
-                        break
-
-                    signal_chunk = signal[chunk_start : chunk_end]
+                    if len(signal) < chunk_end:
+                        signal_chunk = signal[(-OUTPUT_SIGNAL_LENGTH) - 1 : -1]     
+                    else:
+                        signal_chunk = signal[chunk_start : chunk_end]
+                        
                     labeled_signal = np.append(signal_chunk, label)
                     assert len(labeled_signal) == OUTPUT_SIGNAL_LENGTH + 1
 
@@ -125,11 +128,13 @@ def extract_training_data(
                         negative_read_count += 1
                         negative_data.append(labeled_signal)
 
+                    if len(signal) < chunk_end + 500:
+                        break
+
             print(
                 f"File count: {file_count}\t"
                 f"Positive reads: {extracted_read_count}\t"
-                f"Negative reads: {negative_read_count}\t"
-                f"Unsuitable positive reads: {unsitable_positive_read_count}", end='\r'
+                f"Negative reads: {negative_read_count}\t", end='\r'
             )
 
             if file_count % 200 == 0:

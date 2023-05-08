@@ -52,7 +52,7 @@ class DataLoader(Sequence):
         batch_indices = self.item_indices[data_idx_start : data_idx_end]
         self.batch_holder[:] = self.data[batch_indices]
 
-        shift_offset = np.random.randint(-1_000, 1_000) if self.shift else 0
+        shift_offset = np.random.randint(-1_500, 1_500) if self.shift else 0
         item_begin = self.item_begin + shift_offset
         item_end = self.item_end + shift_offset
 

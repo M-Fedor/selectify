@@ -76,16 +76,7 @@ class SarsCoV2Classifier:
         )
 
         input_shape = (self.train_batch_size, self.signal_length, 1)
-        '''
-        self.classifier = Sequential()
-        self.classifier.add(Conv1D(filters=32, kernel_size=75, strides=10, activation='relu', padding='same', input_shape=input_shape[1:]))
-        self.classifier.add(Conv1D(filters=64, kernel_size=75, strides=10, activation='relu', padding='same'))
-        self.classifier.add(MaxPooling1D(pool_size=2))
-        self.classifier.add(Conv1D(filters=64, kernel_size=75, strides=10, activation='relu', padding='same'))
-        self.classifier.add(Flatten())
-        self.classifier.add(Dense(2, activation='softmax'))
 
-        '''
         self.classifier = Sequential()
 
         self.classifier.add(

@@ -139,9 +139,10 @@ class VirtualSequencer:
 
     def produce_output(self, output_path: str) -> None:
         with self.stat_lock, open(output_path, 'wb') as file:
-            for read_id, read_length in self.statistics.read_length_by_read_id.items():
+            for read_id, (read_length, unblocked) in self.statistics.read_length_by_read_id.items():
                 write_binary(file, read_id)
                 write_binary(file, read_length, 4)
+                write_binary(file, unblocked, 1)
         
         dir_name = os.path.dirname(output_path)
         with open(dir_name + '/additional_data.txt', 'w') as file:
@@ -200,7 +201,7 @@ class VirtualSequencer:
 
         with self.stat_lock:
             assert read.read_id in self.statistics.read_length_by_read_id
-            self.statistics.read_length_by_read_id[read_id] = sequenced_bases
+            self.statistics.read_length_by_read_id[read_id] = (sequenced_bases, True)
 
         # sync_print(
         #     f'Unblocking read on channel {channel} read position {sequenced_bases} time-delta {read.time_delta} '
@@ -233,7 +234,8 @@ class VirtualSequencer:
 
                 if read.read_id not in self.statistics.read_length_by_read_id:
                     with self.stat_lock:
-                        self.statistics.read_length_by_read_id[read.read_id] = len(read.raw_data)
+                        sequenced_bases = self._get_sequenced_bases(len(read.raw_data))
+                        self.statistics.read_length_by_read_id[read.read_id] = (sequenced_bases, False)
 
                 chunk_end = self._get_read_position(read.time_delta)
 

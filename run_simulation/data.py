@@ -72,7 +72,7 @@ class SimulatorEvent(Event):
 
 @dataclass(frozen=False)
 class SimulationStatistics:
-    read_length_by_read_id: Dict[str, int]
+    read_length_by_read_id: Dict[str, Tuple[int, bool]]
     saved_times: Dict[int, float]
 
 
