@@ -4,7 +4,7 @@ host = "127.0.0.1"
 port = 5555
 
 [conditions]
-reference = "/home/mfedor/git/selectify/integration/readfish/data/saccharomyces_cerevisiae_index.mmi"
+reference = "integration/readfish/data/saccharomyces_cerevisiae_index.mmi"
 
 [conditions.0]
 name = "select_saccharomyces_cerevisiae"

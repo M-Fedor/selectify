@@ -492,7 +492,7 @@ def run(parser, args):
     except Exception as e:
         logging.error(traceback.format_exc())
 
-    read_until_client.reset(output_path='/home/mfedor/sequencer_output_fixed_max_chunks_hac_inverted_enhanced_6_full_fixed_timing/zymo_selection_sim.bin')
+    read_until_client.reset(output_path='./selection.bin')
 
 
 if __name__ == "__main__":

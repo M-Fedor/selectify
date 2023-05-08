@@ -11,13 +11,13 @@ from run_simulation import LiveRead, ReadUntilSimulator
 from integration.readfish import ReadCache
 
 
-ON_TARGET_THRESHOLD = 0.8
-OFF_TARGET_THRESHOLD = 0.8
+ON_TARGET_THRESHOLD = 0.9
+OFF_TARGET_THRESHOLD = 0.9
 
 
 def get_decision(prediction: Sequence[float]) -> Decision:
-    on_target_confidence = prediction[0]
-    off_target_confidence = prediction[1]
+    on_target_confidence = prediction[1]
+    off_target_confidence = prediction[0]
 
     if on_target_confidence > ON_TARGET_THRESHOLD:
         return (Decision.STOP_RECEIVING, 'stop-receiving')
@@ -43,7 +43,8 @@ def process(
 
     for channel, read in read_batch:
         if len(read.raw_data) > chunk_length:
-            rescaled_signal = rescale_signal(read.raw_data[:chunk_length])
+            chunk_start = len(read.raw_data) - chunk_length
+            rescaled_signal = rescale_signal(read.raw_data[chunk_start:])
             raw_signals.append(rescaled_signal)
             reduced_read_batch.append((channel, read))
 
@@ -61,7 +62,60 @@ def process(
     return decisions
 
 
-def selectify(args: argparse.Namespace) -> None:
+def selectify(
+    read_until_client: ReadUntilSimulator,
+    classifier: SarsCoV2Classifier,
+    args: argparse.Namespace
+) -> None:
+    proceeded_reads = OrderedDict()
+
+    global_processing_time = 0
+    processed_reads = 0
+
+    try:
+        while read_until_client.is_running:
+            t_start = time()
+
+            read_batch = read_until_client.get_read_chunks(batch_size=512)
+            decisions = process(classifier, read_batch, args.chunk_length)
+
+            for decision in decisions:
+                if decision.decision == Decision.UNBLOCK:
+                    read_until_client.unblock_read(decision.channel, decision.read_id)
+                elif decision.decision == Decision.STOP_RECEIVING:
+                    read_until_client.stop_receiving_read(decision.channel, decision.read_id)
+                else:
+                    if decision.read_id in proceeded_reads:
+                        read_until_client.stop_receiving_read(decision.channel, decision.read_id)
+                        decision.decision_context = 'stop-receiveing-max-chunks'
+                        del proceeded_reads[decision.read_id]
+                    else:
+                        insert(proceeded_reads, decision.read_id, args.cache_size)
+                
+                if args.verbose:
+                    print(decision.decision_context)
+
+            t_end = time()
+            processing_time = t_end - t_start
+            sleep_time = args.throttle - processing_time
+
+            if decisions:
+                global_processing_time += processing_time
+                processed_reads += len(decisions)
+
+            if read_batch:
+                print(f'{len(read_batch)} Reads/{len(decisions)} Processed/{processing_time}s')
+
+            if sleep_time > 0:
+                sleep(sleep_time)
+    except KeyboardInterrupt:
+        pass
+
+    time_per_read = global_processing_time / processed_reads
+    print(f'Average time to process a read: {time_per_read}')
+
+
+def run(args: argparse.Namespace) -> None:
     read_until_client = ReadUntilSimulator(
         fast5_read_directory=args.fast5_reads,
         sorted_read_directory=args.sorted_reads,
@@ -76,38 +130,11 @@ def selectify(args: argparse.Namespace) -> None:
 
     read_until_client.run(0, 512)
 
-    proceeded_reads = OrderedDict()
-    while read_until_client.is_running:
-        t_start = time()
-
-        read_batch = read_until_client.get_read_chunks(batch_size=512)
-        decisions = process(classifier, read_batch, args.chunk_length)
-
-        for decision in decisions:
-            if decision.decision == Decision.UNBLOCK:
-                read_until_client.unblock(decision.channel, decision.read_id)
-            elif decision.decision == Decision.STOP_RECEIVING:
-                read_until_client.stop_receiving_read(decision.channel, decision.read_id)
-            else:
-                if decision.read_id in proceeded_reads:
-                    read_until_client.unblock(decision.channel, decision.read_id)
-                    proceeded_reads.remove(decision.read_id)
-                    decision.decision_context = 'unblock-max-chunks'
-                else:
-                    insert(proceeded_reads, decision.read_id, args.cache_size)
-            
-            if args.verbose:
-                print(decision.decision_context)
-
-        t_end = time()
-        processing_time = t_end - t_start
-        sleep_time = args.throttle - processing_time
-
-        if read_batch:
-            print(f'{len(read_batch)} Reads/{len(decisions)} Processed/{processing_time}s')
-
-        if sleep_time > 0:
-            sleep(sleep_time)
+    selectify(
+        read_until_client=read_until_client,
+        classifier=classifier,
+        args=args
+    )
 
     read_until_client.reset(output_path=args.sequencing_output)
 
@@ -117,7 +144,7 @@ def main() -> None:
     if args is None:
         exit()
 
-    selectify(args)
+    run(args)
 
 
 if __name__ == "__main__":

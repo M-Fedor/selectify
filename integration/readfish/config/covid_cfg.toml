@@ -5,7 +5,7 @@ port = 5555
 barcode_kits = ["EXP-NBD104", "EXP-NBD114"]
 
 [conditions]
-reference = "/home/mfedor/git/selectify/integration/readfish/data/covid_index.mmi"
+reference = "integration/readfish/data/covid_index.mmi"
 
 [conditions.unclassified]
 name = "select_covid"
