@@ -1,29 +1,28 @@
+from threading import Event
 from time import sleep
+
+from read_until import ReadCache
 
 from run_simulation import ReadUntilSimulator
 
 
-fast5_directory = 'selectify/data/'
-sorted_directory = 'selectify/output'
+fast5_directory = 'fast5/'
+sorted_directory = 'fast5_index/'
 
-read_until = ReadUntilSimulator(
+read_until_client = ReadUntilSimulator(
     fast5_read_directory=fast5_directory,
     sorted_read_directory=sorted_directory,
-    chunk_time=0.375,
-    realistic=True,
-    cache_size = 512,
+    split_read_interval=0.4,
+    strand_type='dna',
+    data_queue=ReadCache(512),
     one_chunk=True
 )
 
-read_until.run()
+read_until_client.run(0, 512)
 
-while read_until.is_running:
-    read_batch = read_until.get_read_chunks(batch_size=512)
+try:
+    Event().wait()
+except KeyboardInterrupt:
+    pass
 
-    for channel, read in read_batch:
-        sleep(0.001)
-        read_until.unblock_read(channel, read.number)
-
-    sleep(0.1)
-
-read_until.reset()
+read_until_client.reset(output_path='standard_sim.bin')

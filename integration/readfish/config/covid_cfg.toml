@@ -1,0 +1,34 @@
+[caller_settings]
+config_name = "dna_r9.4.1_450bps_hac"
+host = "127.0.0.1"
+port = 5555
+barcode_kits = ["EXP-NBD104", "EXP-NBD114"]
+
+[conditions]
+reference = "integration/readfish/data/covid_index.mmi"
+
+[conditions.unclassified]
+name = "select_covid"
+control = false
+min_chunks = 0
+max_chunks = inf
+targets = ["barcode13/ARTIC/nanopolish"]
+single_on = "stop_receiving"
+multi_on = "stop_receiving"
+single_off = "unblock"
+multi_off = "unblock"
+no_seq = "unblock"
+no_map = "unblock"
+
+[conditions.classified]
+name = "select_covid"
+control = false
+min_chunks = 0
+max_chunks = inf
+targets = ["barcode13/ARTIC/nanopolish"]
+single_on = "stop_receiving"
+multi_on = "stop_receiving"
+single_off = "unblock"
+multi_off = "unblock"
+no_seq = "unblock"
+no_map = "unblock"

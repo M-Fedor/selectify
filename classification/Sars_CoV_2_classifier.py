@@ -8,6 +8,8 @@ from keras.callbacks import EarlyStopping
 from keras.initializers import GlorotUniform, Zeros
 from keras.layers import Conv1D, Dense, Dropout, Flatten, MaxPooling1D
 from keras.models import Sequential, load_model
+from math import floor
+
 
 from .data_loader import DataLoader
 
@@ -17,20 +19,22 @@ SEED = 13
 class SarsCoV2Classifier:
 
     def __init__(self,
-        train_data_path: str,
-        test_data_path: str,
-        signal_length: int,
-        train_batch_size: int,
-        test_batch_size: int
+        train_data_path: str=None,
+        validation_data_path: str=None,
+        signal_length: int=None,
+        signal_begin: int=None,
+        train_batch_size: int=None,
+        validation_batch_size: int=None
     ) -> None:
         self.train_data_path = train_data_path
-        self.test_data_path = test_data_path
+        self.validation_data_path = validation_data_path
         self.signal_length = signal_length
+        self.signal_begin = signal_begin
         self.train_batch_size = train_batch_size
-        self.test_batch_size = test_batch_size
+        self.validation_batch_size = validation_batch_size
 
         self.train_data_loader = None
-        self.test_data_loader = None
+        self.validation_data_loader = None
 
         self.classifier = None
 
@@ -40,27 +44,38 @@ class SarsCoV2Classifier:
         self.false_negatives = 0
 
 
-    def initialize_training(self, strides: int, kernel_size: int, use_data_factor: float=1, shuffle: bool=True) -> None:
+    def initialize_training(
+        self,
+        strides: int,
+        kernel_size: int,
+        use_data_factor: float=1,
+        shuffle: bool=True,
+        shift: bool=False
+    ) -> None:
         train_data = np.load(self.train_data_path, allow_pickle=True, mmap_mode='r')
-        test_data = np.load(self.test_data_path, allow_pickle=True, mmap_mode='r')
+        validation_data = np.load(self.validation_data_path, allow_pickle=True, mmap_mode='r')
 
         self.train_data_loader = DataLoader(
             data=train_data,
             batch_size=self.train_batch_size,
+            item_begin=self.signal_begin,
             item_length=self.signal_length,
             use_items_factor=use_data_factor,
-            shuffle=shuffle
+            shuffle=shuffle,
+            shift=shift
         )
 
-        self.test_data_loader = DataLoader(
-            data=test_data,
-            batch_size=self.test_batch_size,
+        self.validation_data_loader = DataLoader(
+            data=validation_data,
+            batch_size=self.validation_batch_size,
+            item_begin=self.signal_begin,
             item_length=self.signal_length,
             use_items_factor=1,
-            shuffle=shuffle
+            shuffle=shuffle,
+            shift=shift
         )
 
-        input_shape = [len(train_data[0]) - 1, 1]
+        input_shape = (self.train_batch_size, self.signal_length, 1)
 
         self.classifier = Sequential()
 
@@ -70,7 +85,7 @@ class SarsCoV2Classifier:
                 strides=strides,
                 activation='relu',
                 padding='same',
-                input_shape=input_shape,
+                input_shape=input_shape[1:],
                 kernel_initializer=GlorotUniform(SEED),
                 bias_initializer=Zeros()
             )
@@ -107,7 +122,18 @@ class SarsCoV2Classifier:
         self.classifier.add(Flatten())
         self.classifier.add(Dense(2, activation='softmax', kernel_initializer=GlorotUniform(seed=13), bias_initializer=Zeros()))
 
-        self.classifier.compile(loss='categorical_crossentropy', optimizer=keras.optimizers.Adam(0.001),  metrics=['accuracy'])
+        learning_rate_schedule = keras.optimizers.schedules.ExponentialDecay(
+            initial_learning_rate=0.0005,
+            decay_steps=10_000,
+            decay_rate=0.96,
+            staircase=True
+        )
+
+        self.classifier.compile(
+            loss='categorical_crossentropy',
+            optimizer=keras.optimizers.Adam(learning_rate_schedule),
+            metrics=['accuracy']
+        )
 
 
     def train(self, epochs: int) -> None:
@@ -121,7 +147,7 @@ class SarsCoV2Classifier:
 
         self.classifier.fit(
             x=self.train_data_loader,
-            validation_data=self.test_data_loader,
+            validation_data=self.validation_data_loader,
             epochs=epochs,
             verbose=True,
             steps_per_epoch=len(self.train_data_loader),
@@ -132,12 +158,12 @@ class SarsCoV2Classifier:
 
 
     def evaluate(self) -> None:
-        score = self.classifier.evaluate(self.test_data_loader)
+        score = self.classifier.evaluate(self.validation_data_loader)
         print("\n\ntest loss: {} | test acc: {}".format(score[0], score[1]))
 
         evaluation_times = []
 
-        for test_examples, test_classes in self.test_data_loader:
+        for test_examples, test_classes in self.validation_data_loader:
             start = time.time_ns()
             results = self.predict(test_examples)
             end = time.time_ns()
@@ -188,7 +214,7 @@ class SarsCoV2Classifier:
 
 
     def predict(self, inputs: np.ndarray):
-        return self.classifier(inputs)
+        return self.classifier(inputs, training=False)
 
 
     def load(self, path: str) -> None:
